@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "933732005431",
+    "firebase_url": "https://openaudience-3208a-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "openaudience-3208a",
+    "storage_bucket": "openaudience-3208a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:933732005431:android:892324b4cab6bc236971b2",
+        "android_client_info": {
+          "package_name": "com.openaudiencenative"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "933732005431-pnsllnlkc0dol3rv2malhnqdseaoi652.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.openaudiencenative",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "933732005431-ihncm3bjh4d4s3bpepafumqq43pn9mv7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCn13LPDIEV-AAQ5KuKX4bmHbyES9PU5zo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "933732005431-883agq8le7ctmch5n7nduroqe64p84qb.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

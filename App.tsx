@@ -1,45 +1,261 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React, { useState, useEffect, useRef } from 'react';
+import { StatusBar, Text, View, Animated, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Home, Compass, Plus, Bell, User } from 'lucide-react-native';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import WelcomeScreen from './src/screens/WelcomeScreen';
+import InterestScreen from './src/screens/InterestScreen';
+import CommunityScreen from './src/screens/CommunityScreen';
+import HomeScreen from './src/screens/HomeScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import DiscoverScreen from './src/screens/DiscoverScreen'; // Add this
+import { Colors } from './src/theme/Theme';
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+const SuccessScreen = ({ onComplete }: { onComplete: () => void }) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.92)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, friction: 7, tension: 40, useNativeDriver: true })
+    ]).start(() => {
+        setTimeout(onComplete, 2200);
+    });
+  }, []);
 
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#070708' }}>
+      <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }], alignItems: 'center' }}>
+        <Text style={{ fontSize: 34, fontWeight: '900', color: '#ffffff', letterSpacing: -1, marginBottom: 12 }}>
+          Welcome to HERE
+        </Text>
+        <Text style={{ fontSize: 15, fontStyle: 'italic', color: '#A1A1AA', textAlign: 'center', paddingHorizontal: 36, lineHeight: 22 }}>
+          "Find your people. Share what matters."
+        </Text>
+      </Animated.View>
+    </View>
+  );
+};
+
+import CreatePostModal from './src/components/home/CreatePostModal';
+
+import NotificationScreen from './src/screens/NotificationScreen'; // Add this
+
+const currentScreenColor = (isActive: boolean) => (isActive ? Colors.primary : '#8E8E93');
+
+const MainApp = () => {
+  const [currentTab, setCurrentTab] = useState<'home' | 'discover' | 'create' | 'notifications' | 'profile'>('home');
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const insets = useSafeAreaInsets();
+  
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handleCreatePress = () => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 1.15, duration: 100, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 80, useNativeDriver: true })
+    ]).start(() => {
+      setIsCreateOpen(true);
+    });
+  };
+
+  const renderTabContent = () => {
+    switch (currentTab) {
+      case 'home':
+        return <HomeScreen />;
+      case 'discover':
+        return <DiscoverScreen />;
+      case 'notifications':
+        return <NotificationScreen />;
+      case 'profile':
+        return <ProfileScreen />;
+      default:
+        return <HomeScreen />;
+    }
+  };
+
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#070708' }}>
+      {renderTabContent()}
+
+      <View style={[styles.floatingNav, { bottom: insets.bottom + 12 }]}>
+        <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('home')} activeOpacity={0.7}>
+          <Home size={22} color={currentScreenColor(currentTab === 'home')} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('discover')} activeOpacity={0.7}>
+          <Compass size={22} color={currentScreenColor(currentTab === 'discover')} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.createBtn} activeOpacity={0.85} onPress={handleCreatePress}>
+          <Animated.View style={[styles.createBtnInner, { transform: [{ scale: scaleAnim }] }]}>
+            <Plus size={24} color="#ffffff" />
+          </Animated.View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('notifications')} activeOpacity={0.7}>
+          <View>
+            <Bell size={22} color={currentScreenColor(currentTab === 'notifications')} />
+            <View style={styles.unreadDot} />
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('profile')} activeOpacity={0.7}>
+          <User size={22} color={currentScreenColor(currentTab === 'profile')} />
+        </TouchableOpacity>
+      </View>
+
+      <CreatePostModal visible={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
+    </View>
+  );
+};
+
+import { useTheme } from './src/context/ThemeContext';
+
+const AppContent = () => {
+  const { user, userData, isLoading, isLoadingUserData } = useAuth();
+  const { Colors } = useTheme();
+  const [currentScreen, setCurrentScreen] = useState<'welcome' | 'interests' | 'communities' | 'success' | 'home' | 'loading'>('loading');
+  const [initialCheckDone, setInitialCheckDone] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && !isLoadingUserData) {
+      if (user) {
+        if (userData?.username) {
+          if (currentScreen === 'loading') {
+            setCurrentScreen('home');
+          }
+        } else if (currentScreen === 'loading') {
+          setCurrentScreen('welcome');
+        }
+      } else {
+        setCurrentScreen('welcome');
+      }
+    }
+  }, [user, userData, isLoading, isLoadingUserData, currentScreen]);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: (currentScreen === 'loading' || currentScreen === 'welcome') ? '#F8FAFC' : Colors.background }}>
+      {currentScreen === 'loading' && (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      )}
+
+      {currentScreen === 'welcome' && (
+        <WelcomeScreen 
+          onComplete={async (isNew) => {
+            if (isNew === true) {
+               setCurrentScreen('interests');
+            } else {
+               const uid = auth().currentUser?.uid;
+               if (uid) {
+                  try {
+                    const doc = await firestore().collection('users').doc(uid).get();
+                    if (doc.exists() && doc.data()?.username) {
+                       setCurrentScreen('home');
+                    } else {
+                       // Do nothing, they will stay on Welcome Screen setup stage 2 to create username
+                    }
+                  } catch (e) {
+                    console.error('Error fetching user for setup:', e);
+                  }
+               }
+            }
+          }} 
+        />
+      )}
+      {currentScreen === 'interests' && <InterestScreen onComplete={() => setCurrentScreen('communities')} />}
+      {currentScreen === 'communities' && <CommunityScreen onComplete={() => setCurrentScreen('success')} />}
+      {currentScreen === 'success' && <SuccessScreen onComplete={() => setCurrentScreen('home')} />}
+      {currentScreen === 'home' && <MainApp />}
+    </View>
+  );
+};
+
+import { ThemeProvider } from './src/context/ThemeContext';
+
+export default function App() {
+  return (
+    <SafeAreaProvider style={{ backgroundColor: '#0a0a0c' }}>
+      <StatusBar barStyle="light-content" backgroundColor="#0a0a0c" />
+      <AuthProvider>
+        <ThemeProvider>
+           <AppContent />
+        </ThemeProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }
 
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
-  return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: {
+  tabContentCard: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#070708',
   },
+  tabText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  floatingNav: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    height: 64,
+    backgroundColor: 'rgba(20, 20, 25, 0.88)',
+    borderRadius: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.04)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  tabItem: {
+    padding: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  createBtn: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    top: -12,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  createBtnInner: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#ff4500',
+  }
 });
-
-export default App;
