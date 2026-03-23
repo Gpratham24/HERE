@@ -21,6 +21,9 @@ import { Colors, Sizes } from '../theme/Theme';
 import { useTheme } from '../context/ThemeContext';
 import CommunityViewScreen from './CommunityViewScreen';
 import CreateCommunityModal from '../components/discover/CreateCommunityModal';
+import PostCard from '../components/home/PostCard';
+import ProfileScreen from './ProfileScreen';
+import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -30,6 +33,7 @@ const HARDCODED_TOPICS = [
 
 export default function DiscoverScreen() {
   const { Colors } = useTheme();
+  const { userData } = useAuth();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [communities, setCommunities] = useState<any[]>([]);
@@ -39,9 +43,12 @@ export default function DiscoverScreen() {
 
   // Topic filter state
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const [selectedCommunity, setSelectedCommunity] = useState<string | null>(null);
   const [topicPosts, setTopicPosts] = useState<any[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
   const [joinedCommunities, setJoinedCommunities] = useState<string[]>([]);
+  const [followingList, setFollowingList] = useState<string[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
@@ -60,10 +67,25 @@ export default function DiscoverScreen() {
   }, []);
 
   useEffect(() => {
+    const uid = auth().currentUser?.uid;
+    if (!uid) return;
+
+    const unsubscribe = firestore()
+      .collection('followers')
+      .where('followerUid', '==', uid)
+      .onSnapshot(snapshot => {
+         if (snapshot) {
+            setFollowingList(snapshot.docs.map(doc => doc.data().followedUid));
+         }
+      });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
     // 1. Fetch Trending Communities
     const unsubscribeCommunities = firestore()
       .collection('communities')
-      .orderBy('createdAt', 'desc')
       .limit(10)
       .onSnapshot(snapshot => {
         if (snapshot) {
@@ -76,8 +98,7 @@ export default function DiscoverScreen() {
     // 2. Fetch Suggested Users
     const unsubscribeUsers = firestore()
       .collection('users')
-      .orderBy('followersCount', 'desc')
-      .limit(10)
+      .limit(30)
       .onSnapshot(snapshot => {
         if (snapshot) {
           const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -120,11 +141,52 @@ export default function DiscoverScreen() {
     return () => unsubscribe();
   }, [selectedTopic]);
 
-  const handleFollowToggle = (userId: string) => {
-    setFollowingStates(prev => ({
-      ...prev,
-      [userId]: !prev[userId]
-    }));
+  useEffect(() => {
+     console.log('Suggested Users Diagnostics list:', suggestedUsers.map(u => ({ id: u.id, username: u.username })));
+  }, [suggestedUsers]);
+
+  const handleFollowToggle = async (userId: string) => {
+    const uid = auth().currentUser?.uid;
+    if (!uid) return;
+
+    const isFollowing = followingList.includes(userId);
+    try {
+      const batch = firestore().batch();
+      const myRef = firestore().collection('users').doc(uid);
+      const targetRef = firestore().collection('users').doc(userId);
+
+      if (isFollowing) {
+         const snap = await firestore()
+           .collection('followers')
+           .where('followerUid', '==', uid)
+           .where('followedUid', '==', userId)
+           .get();
+         snap.docs.forEach(doc => batch.delete(doc.ref));
+
+         batch.update(myRef, { followingCount: firestore.FieldValue.increment(-1) });
+         batch.update(targetRef, { followersCount: firestore.FieldValue.increment(-1) });
+      } else {
+         const followerRef = firestore().collection('followers').doc();
+         batch.set(followerRef, {
+           followerUid: uid,
+           followedUid: userId,
+         });
+
+         batch.update(myRef, { followingCount: firestore.FieldValue.increment(1) });
+         batch.update(targetRef, { followersCount: firestore.FieldValue.increment(1) });
+
+         // Trigger Notif optional addition just like profile screen
+         const notifRef = firestore().collection('notifications').doc();
+         batch.set(notifRef, {
+           type: 'follow',
+           actorUid: uid,
+           actorUsername: userData?.username || 'user',
+           targetUid: userId,
+           createdAt: firestore.FieldValue.serverTimestamp(),
+         });
+      }
+      await batch.commit();
+    } catch (e) { console.error('Error suggested follow toggle:', e); }
   };
 
   const handleJoinToggle = async (communityName: string) => {
@@ -152,17 +214,17 @@ export default function DiscoverScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors.background }]}>
-      <StatusBar barStyle={Colors.background === '#F4F4F5' ? 'dark-content' : 'light-content'} translucent backgroundColor="transparent" />
+    <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
+      <StatusBar barStyle="dark-content" />
       
       {/* Search Bar with Safe Area */}
       <View style={[styles.searchContainer, { paddingTop: insets.top + 10 }]}>
         <View style={styles.searchBar}>
-          <Search size={18} color="#A1A1AA" style={styles.searchIcon} />
+          <Search size={18} color="#64748B" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search communities, users, posts"
-            placeholderTextColor="#71717A"
+            placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
             clearButtonMode="while-editing"
@@ -170,16 +232,93 @@ export default function DiscoverScreen() {
         </View>
       </View>
 
-      {selectedTopic ? (
+      {selectedCommunity ? (
          <View style={{ flex: 1 }}>
-           <CommunityViewScreen communityName={selectedTopic} onClose={() => setSelectedTopic(null)} />
+            <CommunityViewScreen communityName={selectedCommunity} onClose={() => setSelectedCommunity(null)} />
+         </View>
+      ) : selectedTopic ? (
+         <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+            {/* Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 52, backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }}>
+               <TouchableOpacity onPress={() => setSelectedTopic(null)} style={{ padding: 6 }}>
+                  <ArrowLeft size={22} color="#0F172A" />
+               </TouchableOpacity>
+               <Text style={{ color: '#0F172A', fontSize: 17, fontWeight: '700', marginLeft: 8 }}>#{selectedTopic}</Text>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 50 }}>
+               {/* 1. Related Communities list */}
+               <View style={{ marginTop: 16 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, marginBottom: 12 }}>
+                    <Users size={18} color="#8B5CF6" />
+                    <Text style={{ color: '#0F172A', fontSize: 15, fontWeight: '700' }}>Related Communities</Text>
+                  </View>
+                  
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 16, paddingRight: 4 }}>
+                     {communities.filter(c => c.name.toLowerCase().includes(selectedTopic.toLowerCase())).length > 0 ? (
+                        communities.filter(c => c.name.toLowerCase().includes(selectedTopic.toLowerCase())).map(item => (
+                        <View key={item.id} style={styles.communityCard}>
+                          <TouchableOpacity activeOpacity={0.8} onPress={() => setSelectedCommunity(item.name)} style={{ alignItems: 'center', width: '100%' }}>
+                            {item.iconUrl ? (
+                              <Image source={{ uri: item.iconUrl }} style={styles.communityIcon} />
+                            ) : (
+                              <View style={[styles.communityIcon, { backgroundColor: '#3863FA', justifyContent: 'center', alignItems: 'center' }]}>
+                                <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '800' }}>{item.name[0].toUpperCase()}</Text>
+                              </View>
+                            )}
+                            <Text style={styles.communityName} numberOfLines={1}>{item.name}</Text>
+                            <View style={styles.memberCountRow}>
+                              <Users size={12} color="#64748B" />
+                              <Text style={styles.memberCountText}>{item.membersCount || 0}</Text>
+                            </View>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            style={[styles.joinBtn, joinedCommunities.some(c => c.toLowerCase() === item.name.toLowerCase()) && styles.joinedBtn]} 
+                            onPress={() => handleJoinToggle(item.name)}
+                          >
+                            <Text style={styles.joinBtnText}>{joinedCommunities.some(c => c.toLowerCase() === item.name.toLowerCase()) ? 'Joined' : 'Join'}</Text>
+                          </TouchableOpacity>
+                        </View>
+                        ))
+                     ) : (
+                        <Text style={{ color: '#64748B', fontSize: 13, paddingLeft: 16 }}>No related communities</Text>
+                     )}
+                  </ScrollView>
+               </View>
+
+               {/* 2. Posts Feed inside topic row layout section */}
+               <View style={{ marginTop: 24 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 6, marginBottom: 12 }}>
+                    <Flame size={16} color="#F59E0B" />
+                    <Text style={{ color: '#0F172A', fontSize: 15, fontWeight: '700' }}>Recent Posts</Text>
+                  </View>
+
+                  {postsLoading ? (
+                     <ActivityIndicator size="small" color="#8B5CF6" style={{ marginTop: 20 }} />
+                  ) : topicPosts.length === 0 ? (
+                     <Text style={{ color: '#64748B', fontSize: 13, paddingHorizontal: 16 }}>No posts found for this topic.</Text>
+                  ) : (
+                     topicPosts.map((post: any) => (
+                        <PostCard 
+                          key={post.id}
+                          item={post} 
+                          userData={userData} 
+                          followingList={[]} 
+                          onFollow={() => {}} 
+                          onCommentPress={() => {}} 
+                          onProfilePress={() => {}} 
+                        />
+                     ))
+                  )}
+               </View>
+            </ScrollView>
          </View>
       ) : (
         // Standard Sections
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           
           <TouchableOpacity style={styles.createMainBtn} onPress={() => setIsCreateModalOpen(true)}>
-             <Plus size={16} color="#ffffff" />
+             <Plus size={16} color="#0F172A" />
              <Text style={styles.createMainBtnText}>Create Community</Text>
           </TouchableOpacity>
 
@@ -195,23 +334,24 @@ export default function DiscoverScreen() {
               showsHorizontalScrollIndicator={false} 
               contentContainerStyle={styles.horizontalScroll}
             >
-              {communities.filter(c => !joinedCommunities.some(j => j.toLowerCase() === c.name.toLowerCase())).length > 0 ? (
-                communities
-                  .filter(c => !joinedCommunities.some(j => j.toLowerCase() === c.name.toLowerCase()))
-                  .map(item => (
+              {communities.length > 0 ? (
+                communities.map(item => (
                   <View key={item.id} style={styles.communityCard}>
                     <TouchableOpacity 
                       activeOpacity={0.8}
-                      onPress={() => setSelectedTopic(item.name)} 
+                      onPress={() => setSelectedCommunity(item.name)} 
                       style={{ alignItems: 'center', width: '100%' }}
                     >
-                      <Image 
-                        source={{ uri: item.iconUrl || 'https://images.unsplash.com/photo-1543269865-cbf427effbad?w=200&q=80' }} 
-                        style={styles.communityIcon} 
-                      />
+                      {item.iconUrl ? (
+                         <Image source={{ uri: item.iconUrl }} style={styles.communityIcon} />
+                      ) : (
+                         <View style={[styles.communityIcon, { backgroundColor: '#3863FA', justifyContent: 'center', alignItems: 'center' }]}>
+                           <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '800' }}>{item.name[0].toUpperCase()}</Text>
+                         </View>
+                      )}
                       <Text style={styles.communityName} numberOfLines={1}>{item.name}</Text>
                       <View style={styles.memberCountRow}>
-                        <Users size={12} color="#A1A1AA" />
+                        <Users size={12} color="#64748B" />
                         <Text style={styles.memberCountText}>{item.membersCount || 0}</Text>
                       </View>
                     </TouchableOpacity>
@@ -265,11 +405,11 @@ export default function DiscoverScreen() {
             </View>
 
             <View style={styles.usersList}>
-              {suggestedUsers.length > 0 ? (
-                suggestedUsers.map(user => {
-                  const isFollowing = followingStates[user.id];
+              {suggestedUsers.filter(u => !followingList.includes(u.id)).length > 0 ? (
+                suggestedUsers.filter(u => !followingList.includes(u.id)).map(user => {
+                  const isFollowing = followingList.includes(user.id);
                   return (
-                    <View key={user.id} style={styles.userRow}>
+                    <TouchableOpacity key={user.id} style={styles.userRow} activeOpacity={0.8} onPress={() => setSelectedUserId(user.id)}>
                       <Image 
                         source={{ uri: user.avatarUrl || user.photoURL || 'https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=200&q=80' }} 
                         style={styles.userAvatar} 
@@ -287,12 +427,12 @@ export default function DiscoverScreen() {
                         activeOpacity={0.8}
                       >
                         {isFollowing ? (
-                          <Check size={16} color="#A1A1AA" />
+                          <Check size={16} color="#64748B" />
                         ) : (
                           <Text style={styles.followBtnText}>Follow</Text>
                         )}
                       </TouchableOpacity>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })
               ) : (
@@ -315,6 +455,11 @@ export default function DiscoverScreen() {
          }} 
       />
 
+      {/* 👤 View User Profile Modal */}
+      <Modal visible={selectedUserId !== null} transparent={false} animationType="slide">
+        <ProfileScreen userId={selectedUserId || undefined} onClose={() => setSelectedUserId(null)} />
+      </Modal>
+
     </View>
   );
 }
@@ -322,10 +467,10 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070708',
+    backgroundColor: '#F8FAFC',
   },
   createMainBtn: {
-    backgroundColor: '#16161E',
+    backgroundColor: '#ffffff',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -333,13 +478,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
+    borderColor: '#E2E8F0',
     gap: 8,
     marginTop: 10,
     marginBottom: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
   },
   createMainBtnText: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -355,19 +505,24 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#16161E',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 44,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
   },
   searchIcon: {
     marginRight: 10,
   },
   searchInput: {
     flex: 1,
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 14,
   },
   scrollContent: {
@@ -384,7 +539,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionTitle: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 16,
     fontWeight: '700',
   },
@@ -393,24 +548,29 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   communityCard: {
-    backgroundColor: '#16161E',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 10,
     width: 120,
     marginRight: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.03)',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
   },
   communityIcon: {
     width: 50,
     height: 50,
     borderRadius: 25,
     marginBottom: 8,
-    backgroundColor: '#1C1C24',
+    backgroundColor: '#F1F5F9',
   },
   communityName: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 4,
@@ -427,9 +587,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   joinedBtn: {
-    backgroundColor: '#1C1C24',
+    backgroundColor: '#F1F5F9',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: '#E2E8F0',
   },
   joinBtnText: {
     color: '#ffffff',
@@ -442,7 +602,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   memberCountText: {
-    color: '#A1A1AA',
+    color: '#64748B',
     fontSize: 11,
   },
   chipContainer: {
@@ -452,51 +612,61 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    backgroundColor: '#16161E',
+    backgroundColor: '#ffffff',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
   },
   chipText: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 13,
     fontWeight: '500',
   },
   usersList: {
     paddingHorizontal: 16,
-    backgroundColor: '#16161E',
+    backgroundColor: '#ffffff',
     borderRadius: 16,
     marginHorizontal: 16,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.03)',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
   },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.02)',
+    borderBottomColor: '#F1F5F9',
   },
   userAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#27272A',
+    backgroundColor: '#E2E8F0',
   },
   userInfo: {
     flex: 1,
     marginLeft: 12,
   },
   username: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: '600',
   },
   userStats: {
-    color: '#A1A1AA',
+    color: '#64748B',
     fontSize: 12,
     marginTop: 2,
   },
@@ -510,9 +680,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   followingBtn: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#F1F5F9',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#E2E8F0',
   },
   followBtnText: {
     color: '#ffffff',
@@ -520,71 +690,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   emptyText: {
-    color: '#71717A',
+    color: '#64748B',
     fontSize: 14,
     paddingLeft: 16,
-  },
-  topicHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
-  },
-  backBtn: {
-    marginRight: 12,
-  },
-  topicHeaderTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  postCard: {
-    backgroundColor: '#101015',
-    marginBottom: 12,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.02)',
-  },
-  postHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  postAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  postHeaderInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  postCommunity: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  postUsername: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  postCaption: {
-    color: '#E4E4E7',
-    fontSize: 14,
-    lineHeight: 20,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  postMedia: {
-    width: width,
-    height: width * 0.8,
-    resizeMode: 'cover',
-    backgroundColor: '#16161E',
   },
 });

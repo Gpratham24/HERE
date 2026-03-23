@@ -8,7 +8,8 @@ import {
   Modal, 
   ActivityIndicator, 
   StatusBar, 
-  Image 
+  Image,
+  ScrollView,
 } from 'react-native';
 import { X, Camera } from 'lucide-react-native';
 import firestore from '@react-native-firebase/firestore';
@@ -30,6 +31,8 @@ export default function EditCommunityModal({ visible, communityName, initialData
   const [bannerUri, setBannerUri] = useState<string | null>(initialData?.bannerUrl || null);
   const [iconUri, setIconUri] = useState<string | null>(initialData?.iconUrl || null);
 
+  const [members, setMembers] = useState<any[]>([]);
+
   useEffect(() => {
      if (initialData) {
         setDesc(initialData.description || '');
@@ -37,6 +40,31 @@ export default function EditCommunityModal({ visible, communityName, initialData
         setIconUri(initialData.iconUrl || null);
      }
   }, [initialData]);
+
+  useEffect(() => {
+     if (!communityName) return;
+     const unsub = firestore()
+        .collection('users')
+        .where('joinedCommunities', 'array-contains', communityName)
+        .onSnapshot(snap => {
+           if (snap) {
+              setMembers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() as any })));
+           }
+        }, err => console.log('members load err:', err));
+     return () => unsub();
+  }, [communityName]);
+
+  const handleBlockUser = async (userUid: string) => {
+     try {
+        await firestore().collection('users').doc(userUid).update({
+           joinedCommunities: firestore.FieldValue.arrayRemove(communityName)
+        });
+        const formattedId = communityName.toLowerCase().replace(/ /g, '-');
+        await firestore().collection('communities').doc(formattedId).update({
+           blockedUsers: firestore.FieldValue.arrayUnion(userUid)
+        });
+     } catch (e) { console.error('Block user err:', e); }
+  };
 
   const handlePickBanner = () => {
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, (res) => {
@@ -113,6 +141,18 @@ export default function EditCommunityModal({ visible, communityName, initialData
            )}
         </TouchableOpacity>
 
+        {/* 📷 Icon Profile Pick */}
+        <Text style={styles.label}>Community Icon (Profile)</Text>
+        <TouchableOpacity style={styles.iconPickContainer} onPress={handlePickIcon}>
+           {iconUri ? (
+              <Image source={{ uri: iconUri }} style={styles.iconImage} />
+           ) : (
+              <View style={styles.iconPlaceholder}>
+                 <Camera size={20} color="#A1A1AA" />
+              </View>
+           )}
+        </TouchableOpacity>
+
         {/* 📝 Description */}
         <Text style={styles.label}>Description</Text>
         <TextInput 
@@ -123,6 +163,27 @@ export default function EditCommunityModal({ visible, communityName, initialData
           onChangeText={setDesc}
           multiline
         />
+
+         {/* 👥 Members lists Scroll */}
+         <Text style={styles.label}>Members ({members.length})</Text>
+         <View style={{ maxHeight: 160, backgroundColor: '#16161E', borderRadius: 14, padding: 12, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)' }}>
+            <TextInput style={{ backgroundColor: '#070708', color: '#fff', padding: 8, borderRadius: 8, fontSize: 12, marginBottom: 8 }} placeholder="Search members..." placeholderTextColor="#52525B" />
+            <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.04)', marginBottom: 8 }} />
+            {members.length === 0 ? (
+               <Text style={{ color: '#52525B', fontSize: 13, textAlign: 'center', marginTop: 10 }}>No members found</Text>
+            ) : (
+               <ScrollView style={{ flex: 1 }}>
+                  {members.map(m => (
+                     <View key={m.id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 6, paddingVertical: 4 }}>
+                        <Text style={{ color: '#E4E4E5', fontSize: 13, fontWeight: '600' }}>@{m.username}</Text>
+                        <TouchableOpacity onPress={() => handleBlockUser(m.id)} style={{ paddingVertical: 4, paddingHorizontal: 10, backgroundColor: 'rgba(239, 68, 68, 0.12)', borderRadius: 12 }}>
+                           <Text style={{ color: '#EF4444', fontSize: 11, fontWeight: '800' }}>Block</Text>
+                        </TouchableOpacity>
+                     </View>
+                  ))}
+               </ScrollView>
+            )}
+         </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -221,5 +282,27 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '800',
+  },
+  iconPickContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#16161E',
+    marginBottom: 20,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.04)',
+  },
+  iconImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  iconPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

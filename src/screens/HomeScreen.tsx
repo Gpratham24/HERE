@@ -17,9 +17,11 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import EditCommunityModal from '../components/discover/EditCommunityModal';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { useAuth } from '../context/AuthContext';
+import CommunityViewScreen from './CommunityViewScreen';
 import { useTheme } from '../context/ThemeContext';
 import { Colors } from '../theme/Theme';
 import { Heart, MessageCircle, Share2, Bell, MoreHorizontal, Send, X } from 'lucide-react-native';
@@ -43,10 +45,41 @@ export default function HomeScreen() {
   const [activePost, setActivePost] = useState<any>(null);
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState<any[]>([]);
-  
+
   const [selectedProfileUser, setSelectedProfileUser] = useState<string | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [followingList, setFollowingList] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<'communities' | 'interests' | 'discussions'>('communities');
+  const [replyingToComment, setReplyingToComment] = useState<any | null>(null);
+
+  // States for Community Details sheet Modal
+  const [selectedCommunity, setSelectedCommunity] = useState<string | null>(null);
+  const [communityDetails, setCommunityDetails] = useState<any>(null);
+  const [communityPosts, setCommunityPosts] = useState<any[]>([]);
+  const [isLoadingCommunity, setIsLoadingCommunity] = useState(false);
+
+  useEffect(() => {
+     const migrate = async () => {
+        const uid = auth().currentUser?.uid;
+        if (!uid) return;
+        const mainDoc = await firestore().collection('users').doc(uid).get();
+        if (mainDoc.exists() && !mainDoc.data()?.stats) {
+            const data = mainDoc.data() || {};
+            await mainDoc.ref.update({
+               stats: {
+                  postsCount: data.postsCount || 0,
+                  followersCount: data.followersCount || 0,
+                  followingCount: data.followingCount || 0,
+                  joinedCommunitiesCount: data.joinedCommunities?.length || 0,
+                  appreciationsTotal: data.appreciationsTotal || 0
+               },
+               joinedCommunities: data.joinedCommunities || [],
+               savedPosts: data.savedPosts || []
+            });
+        }
+     };
+     migrate();
+  }, []);
 
 
 
@@ -56,7 +89,7 @@ export default function HomeScreen() {
       .collection('posts')
       .doc(activePost.id)
       .collection('comments')
-//      .orderBy('createdAt', 'desc') // Need index, using client sort
+      //      .orderBy('createdAt', 'desc') // Need index, using client sort
       .onSnapshot(snapshot => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         list.sort((a: any, b: any) => {
@@ -70,48 +103,117 @@ export default function HomeScreen() {
   }, [activePost]);
 
 
+  // 1. Fetch Posts based on activeTab
   useEffect(() => {
+    setLoading(true);
     const joinedCommunities = userData?.joinedCommunities || [];
-    
     let query: any = firestore().collection('posts');
-    
-    // If user has joined some communities, filter by them
-    if (joinedCommunities.length > 0) {
-       // Note: Firestore IN query is capped at 10 or 30 items max generally setups.
-       // It filters where communityName matches items inside array smoothly layout setup.
-       query = query.where('communityName', 'in', joinedCommunities);
+
+    // If on communities tab, filter by joined communities
+    if (activeTab === 'communities' && joinedCommunities.length > 0) {
+      query = query.where('communityName', 'in', joinedCommunities);
     }
 
     const unsubscribe = query
-       .onSnapshot((snapshot: any) => {
-         if (snapshot) {
-            const list = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-            setPosts(list);
-         }
-         setLoading(false);
-       }, (err: any) => {
-         console.error('Error fetching filtered posts:', err);
-         setLoading(false);
-       });
+      .onSnapshot((snapshot: any) => {
+        if (snapshot) {
+          let list = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
 
+          // Client-side filtering for feed sections
+          if (activeTab === 'discussions') {
+            list = list.filter((p: any) => (p.commentsCount || 0) > 0);
+          } else if (activeTab === 'interests') {
+            // Simulate interests filter layout trigger
+            list = list.filter((p: any) => p.mediaUrl || (p.content && p.content.length > 50));
+          }
+
+          list.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
+          // 🤝 Merge duplicate sub-posts into a single card triggers
+          const grouped: any[] = [];
+          list.forEach((p: any) => {
+             const key = `${p.userId}_${p.createdAt?.seconds || p.createdAt?.nanoseconds || 0}_${(p.content || '').substring(0,10)}`;
+             const match = grouped.find(g => {
+                const gKey = `${g.userId}_${g.createdAt?.seconds || g.createdAt?.nanoseconds || 0}_${(g.content || '').substring(0,10)}`;
+                return gKey === key;
+             });
+             if (match) {
+                if (!match.communityNames) match.communityNames = [match.communityName];
+                if (!match.communityNames.includes(p.communityName)) match.communityNames.push(p.communityName);
+             } else {
+                p.communityNames = [p.communityName];
+                grouped.push(p);
+             }
+          });
+
+          setPosts(grouped);
+        }
+        setLoading(false);
+      }, (err: any) => {
+        console.error('Error fetching filtered posts:', err);
+        setLoading(false);
+      });
+
+    return () => unsubscribe();
+  }, [activeTab, userData?.joinedCommunities]);
+
+  // 2. Fetch Following List
+  useEffect(() => {
     const uid = auth().currentUser?.uid;
-    let unsubFollow = () => {};
-    if (uid) {
-      unsubFollow = firestore()
-        .collection('followers')
-        .where('followerUid', '==', uid)
-        .onSnapshot(snap => {
-          const list = snap.docs.map(doc => doc.data().followedUid);
-          setFollowingList(list);
-        }, err => console.error('Error following:', err));
-    }
+    if (!uid) return;
 
-    return () => {
-      unsubscribe();
-      unsubFollow();
-    };
+    const unsubscribe = firestore()
+      .collection('followers')
+      .where('followerUid', '==', uid)
+      .onSnapshot(snap => {
+        const list = snap.docs.map(doc => doc.data().followedUid);
+        setFollowingList(list);
+      }, err => console.error('Error following:', err));
+
+    return () => unsubscribe();
   }, []);
 
+  // 3. Fetch Community Details when selected
+  useEffect(() => {
+    if (selectedCommunity) {
+      setIsLoadingCommunity(true);
+
+      const unsubscribeDetails = firestore()
+        .collection('communities')
+        .where('name', '==', selectedCommunity)
+        .onSnapshot(snap => {
+          if (snap && !snap.empty) {
+            setCommunityDetails({ id: snap.docs[0].id, ...snap.docs[0].data() });
+          } else {
+            setCommunityDetails({ name: selectedCommunity, membersCount: 0 });
+          }
+        }, err => console.error('Error community details:', err));
+
+      const unsubscribePosts = firestore()
+        .collection('posts')
+        .where('communityName', '==', selectedCommunity)
+        .onSnapshot(snap => {
+          if (snap) {
+            const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // Sort client side to avoid needing composite index
+            list.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            setCommunityPosts(list);
+          }
+          setIsLoadingCommunity(false);
+        }, err => {
+          console.error('Error community posts:', err);
+          setIsLoadingCommunity(false);
+        });
+
+      return () => {
+        unsubscribeDetails();
+        unsubscribePosts();
+      };
+    } else {
+      setCommunityDetails(null);
+      setCommunityPosts([]);
+    }
+  }, [selectedCommunity]);
 
   // handleLike logic moved to PostCard and postService
 
@@ -126,34 +228,34 @@ export default function HomeScreen() {
 
       const isFollowing = followingList.includes(targetUid);
       if (isFollowing) {
-         const snap = await firestore()
-           .collection('followers')
-           .where('followerUid', '==', uid)
-           .where('followedUid', '==', targetUid)
-           .get();
-         snap.docs.forEach(doc => batch.delete(doc.ref));
+        const snap = await firestore()
+          .collection('followers')
+          .where('followerUid', '==', uid)
+          .where('followedUid', '==', targetUid)
+          .get();
+        snap.docs.forEach(doc => batch.delete(doc.ref));
 
-         batch.update(myRef, { followingCount: firestore.FieldValue.increment(-1) });
-         batch.update(targetRef, { followersCount: firestore.FieldValue.increment(-1) });
+        batch.update(myRef, { followingCount: firestore.FieldValue.increment(-1) });
+        batch.update(targetRef, { followersCount: firestore.FieldValue.increment(-1) });
       } else {
-         const followerRef = firestore().collection('followers').doc();
-         batch.set(followerRef, {
-           followerUid: uid,
-           followedUid: targetUid,
-           createdAt: firestore.FieldValue.serverTimestamp(),
-         });
+        const followerRef = firestore().collection('followers').doc();
+        batch.set(followerRef, {
+          followerUid: uid,
+          followedUid: targetUid,
+          createdAt: firestore.FieldValue.serverTimestamp(),
+        });
 
-         batch.update(myRef, { followingCount: firestore.FieldValue.increment(1) });
-         batch.update(targetRef, { followersCount: firestore.FieldValue.increment(1) });
+        batch.update(myRef, { followingCount: firestore.FieldValue.increment(1) });
+        batch.update(targetRef, { followersCount: firestore.FieldValue.increment(1) });
 
-         const notifRef = firestore().collection('notifications').doc();
-         batch.set(notifRef, {
-           type: 'follow',
-           actorUid: uid,
-           actorUsername: userData?.username || 'user',
-           targetUid: targetUid,
-           createdAt: firestore.FieldValue.serverTimestamp(),
-         });
+        const notifRef = firestore().collection('notifications').doc();
+        batch.set(notifRef, {
+          type: 'follow',
+          actorUid: uid,
+          actorUsername: userData?.username || 'user',
+          targetUid: targetUid,
+          createdAt: firestore.FieldValue.serverTimestamp(),
+        });
       }
       await batch.commit();
     } catch (err) {
@@ -177,22 +279,26 @@ export default function HomeScreen() {
           username: userData?.username || 'user',
           text: commentText.trim(),
           createdAt: firestore.FieldValue.serverTimestamp(),
+          parentId: replyingToComment ? replyingToComment.id : null,
         });
 
-      await firestore()
-        .collection('posts')
-        .doc(activePost.id)
-        .update({
-          commentsCount: firestore.FieldValue.increment(1),
-        });
+      if (!replyingToComment) {
+        await firestore()
+          .collection('posts')
+          .doc(activePost.id)
+          .update({
+            commentsCount: firestore.FieldValue.increment(1),
+          });
+      }
 
-      // Notify Post Creator
-      if (activePost.userId !== uid) {
+      // Notify Post Creator OR Parent Comment Creator
+      const targetUid = replyingToComment ? replyingToComment.userId : activePost.userId;
+      if (targetUid !== uid) {
         await firestore().collection('notifications').add({
-          type: 'comment',
+          type: replyingToComment ? 'reply' : 'comment',
           actorUid: uid,
           actorUsername: userData?.username || 'user',
-          targetUid: activePost.userId,
+          targetUid: targetUid,
           postId: activePost.id,
           commentText: commentText.trim(),
           createdAt: firestore.FieldValue.serverTimestamp(),
@@ -200,6 +306,7 @@ export default function HomeScreen() {
       }
 
       setCommentText('');
+      setReplyingToComment(null);
     } catch (err) {
       console.error('Error adding comment:', err);
     }
@@ -208,26 +315,69 @@ export default function HomeScreen() {
 
   const renderPost = ({ item }: { item: any }) => {
     return (
-      <PostCard 
-        item={item} 
-        userData={userData} 
-        followingList={followingList} 
-        onFollow={handleFollow} 
+      <PostCard
+        item={item}
+        userData={userData}
+        followingList={followingList}
+        onFollow={handleFollow}
         onCommentPress={() => { setActivePost(item); setIsCommentOpen(true); }}
         onProfilePress={(id) => { setSelectedProfileUser(id); setIsProfileModalOpen(true); }}
+        onCommunityPress={(name) => setSelectedCommunity(name)}
       />
     );
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors.background }]}>
-      <StatusBar barStyle={Colors.background === '#F4F4F5' ? 'dark-content' : 'light-content'} />
-      
-      {/* Top Navbar Navbar with Safe Area Support */}
-      <View style={[styles.navbar, { paddingTop: insets.top + 10, height: 60 + insets.top, backgroundColor: Colors.surface, borderBottomColor: Colors.border }]}>
-        <Text style={[styles.navTitle, { color: Colors.text }]}>HERE</Text>
+    <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+
+      {/* Top Navbar with Safe Area Support */}
+      <View style={[styles.navbar, { paddingTop: insets.top + 10, height: 50 + insets.top, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }]}>
+        <View style={{ gap: 1 }}>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F172A' }}>HERE</Text>
+          <Text style={{ color: '#64748B', fontSize: 11, fontWeight: '500' }}>Your communities</Text>
+        </View>
       </View>
 
+      {/* Feed Sections Tab Bar */}
+      <View style={[styles.tabBar, { paddingBottom: 12, paddingTop: 10, gap: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }]}>
+        <TouchableOpacity
+          onPress={() => setActiveTab('communities')}
+          style={[{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }, activeTab === 'communities' ? { backgroundColor: 'rgba(139, 92, 246, 0.12)' } : {}]}
+        >
+          <Text style={[styles.tabText, { color: '#64748B' }, activeTab === 'communities' && { color: Colors.primary || '#8B5CF6', fontWeight: '800' }]}>From communities</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => setActiveTab('interests')}
+          style={[{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }, activeTab === 'interests' ? { backgroundColor: 'rgba(139, 92, 246, 0.12)' } : {}]}
+        >
+          <Text style={[styles.tabText, { color: '#64748B' }, activeTab === 'interests' && { color: Colors.primary || '#8B5CF6', fontWeight: '800' }]}>Based on interests</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => setActiveTab('discussions')}
+          style={[{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }, activeTab === 'discussions' ? { backgroundColor: 'rgba(139, 92, 246, 0.12)' } : {}]}
+        >
+          <Text style={[styles.tabText, { color: '#64748B' }, activeTab === 'discussions' && { color: Colors.primary || '#8B5CF6', fontWeight: '800' }]}>Active discussions</Text>
+        </TouchableOpacity>
+      </View>
+
+
+      {/* 🏘️ Community Detail View Modal */}
+      <Modal
+        visible={selectedCommunity !== null}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setSelectedCommunity(null)}
+      >
+        {selectedCommunity && (
+          <CommunityViewScreen
+            communityName={selectedCommunity}
+            onClose={() => setSelectedCommunity(null)}
+          />
+        )}
+      </Modal>
 
       {loading && posts.length === 0 ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -259,8 +409,8 @@ export default function HomeScreen() {
             <View style={styles.commentSheet}>
               {/* Header */}
               <View style={styles.commentHeader}>
-                <Text style={styles.commentTitle}>Comments ({comments.length})</Text>
-                <TouchableOpacity onPress={() => setIsCommentOpen(false)}>
+                <Text style={styles.commentTitle}>Discussions ({comments.filter((c: any) => !c.parentId).length})</Text>
+                <TouchableOpacity onPress={() => { setIsCommentOpen(false); setReplyingToComment(null); }}>
                   <X size={18} color="#E4E4E7" />
                 </TouchableOpacity>
               </View>
@@ -268,21 +418,44 @@ export default function HomeScreen() {
               {/* Comments List */}
               <ScrollView style={styles.commentsList} showsVerticalScrollIndicator={false}>
                 {comments.length === 0 ? (
-                  <Text style={styles.noComments}>No comments yet. Be the first!</Text>
+                  <Text style={styles.noComments}>No discussions yet. Be the first!</Text>
                 ) : (
-                  comments.map((item: any) => (
+                  comments.filter((item: any) => !item.parentId).map((item: any) => (
                     <View key={item.id} style={styles.commentItem}>
-                      <Text style={styles.commentUser}>@{item.username}</Text>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={styles.commentUser}>@{item.username}</Text>
+                        <TouchableOpacity onPress={() => { setReplyingToComment(item); setCommentText(`@${item.username} `); }}>
+                          <Text style={{ color: Colors.primary || '#3863FA', fontSize: 11, fontWeight: '600' }}>Reply</Text>
+                        </TouchableOpacity>
+                      </View>
                       <Text style={styles.commentText}>{item.text}</Text>
+
+                      {/* Sub-threads replies */}
+                      {comments.filter((c: any) => c.parentId === item.id).map((sub: any) => (
+                        <View key={sub.id} style={{ marginLeft: 20, marginTop: 10, paddingLeft: 12, borderLeftWidth: 1, borderLeftColor: '#E2E8F0' }}>
+                          <Text style={styles.commentUser}>@{sub.username}</Text>
+                          <Text style={styles.commentText}>{sub.text}</Text>
+                        </View>
+                      ))}
                     </View>
                   ))
                 )}
               </ScrollView>
 
+              {/* Replying Banner Above Input */}
+              {replyingToComment && (
+                <View style={{ backgroundColor: 'rgba(255,255,255,0.02)', paddingVertical: 8, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopColor: 'rgba(255,255,255,0.03)', borderTopWidth: 1 }}>
+                  <Text style={{ color: '#A1A1AA', fontSize: 12 }}>Replying to @{replyingToComment.username}</Text>
+                  <TouchableOpacity onPress={() => { setReplyingToComment(null); setCommentText(''); }}>
+                    <X size={14} color="#A1A1AA" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {/* Input Row */}
               <View style={[styles.commentInputRow, { paddingBottom: insets.bottom + 12 }]}>
                 <TextInput
-                  placeholder="Add a comment..."
+                  placeholder="Add to discussion..."
                   placeholderTextColor="#A1A1AA"
                   style={styles.commentInput}
                   value={commentText}
@@ -299,9 +472,9 @@ export default function HomeScreen() {
 
       {/* Profile Modal */}
       <Modal visible={isProfileModalOpen} transparent={false} animationType="slide" onRequestClose={() => setIsProfileModalOpen(false)}>
-         {selectedProfileUser && (
-            <ProfileScreen userId={selectedProfileUser} onClose={() => setIsProfileModalOpen(false)} />
-         )}
+        {selectedProfileUser && (
+          <ProfileScreen userId={selectedProfileUser} onClose={() => setIsProfileModalOpen(false)} />
+        )}
       </Modal>
     </View>
   );
@@ -310,32 +483,26 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070708',
   },
   navbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    backgroundColor: '#0c0c12',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
   },
   navTitle: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#ffffff',
     letterSpacing: -0.5,
   },
   navIconBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#16161E',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
   },
   unreadBadge: {
     position: 'absolute',
@@ -350,11 +517,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   card: {
-    backgroundColor: '#101015',
     marginBottom: 12,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.02)',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -367,19 +532,16 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   headerInfo: {
     flex: 1,
     marginLeft: 12,
   },
   communityName: {
-    color: '#ffffff',
     fontSize: 14,
     fontWeight: '700',
   },
   username: {
-    color: Colors.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
@@ -387,7 +549,6 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   caption: {
-    color: '#E4E4E7',
     fontSize: 14,
     lineHeight: 20,
     paddingHorizontal: 16,
@@ -397,7 +558,6 @@ const styles = StyleSheet.create({
     width: width,
     height: width * 0.8,
     resizeMode: 'cover',
-    backgroundColor: '#16161E',
   },
   actionBar: {
     flexDirection: 'row',
@@ -409,39 +569,35 @@ const styles = StyleSheet.create({
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#16161E',
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 20,
     gap: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.02)',
   },
   actionBtnActive: {
-    backgroundColor: 'rgba(255, 69, 0, 0.08)',
-    borderColor: 'rgba(255, 69, 0, 0.2)',
+    backgroundColor: 'rgba(139, 92, 246, 0.08)',
+    borderColor: 'rgba(139, 92, 246, 0.2)',
   },
   actionText: {
-    color: '#A1A1AA',
     fontSize: 13,
     fontWeight: '600',
   },
   followText: {
-    color: '#3863FA',
     fontSize: 12,
     fontWeight: 'bold',
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
   commentSheet: {
     height: '65%',
-    backgroundColor: '#101015',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#E2E8F0',
   },
   commentHeader: {
     flexDirection: 'row',
@@ -449,10 +605,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
+    borderBottomColor: '#E2E8F0',
   },
   commentTitle: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -464,13 +620,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   commentUser: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 13,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   commentText: {
-    color: '#E4E4E7',
+    color: '#334155',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -480,28 +636,50 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.03)',
-    backgroundColor: '#0c0c12',
+    borderTopColor: '#E2E8F0',
+    backgroundColor: '#ffffff',
   },
   commentInput: {
     flex: 1,
-    backgroundColor: '#16161E',
+    backgroundColor: '#F1F5F9',
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    color: '#ffffff',
+    paddingVertical: 10,
+    color: '#0F172A',
     fontSize: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#E2E8F0',
   },
   sendBtn: {
     marginLeft: 12,
     padding: 8,
   },
   noComments: {
-    color: '#A1A1AA',
+    color: '#64748B',
     fontSize: 14,
     textAlign: 'center',
     marginTop: 40,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  tabItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  tabItemActive: {
+    backgroundColor: 'rgba(139, 92, 246, 0.08)',
+    borderColor: 'rgba(139, 92, 246, 0.2)',
+  },
+  tabText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

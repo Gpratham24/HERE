@@ -9,12 +9,14 @@ import {
   Image,
   TouchableOpacity,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { Colors } from '../theme/Theme';
-import { Heart, MessageSquare, Plus, Bell, UserPlus } from 'lucide-react-native';
+import { Heart, MessageSquare, Plus, Bell, UserPlus, Eye } from 'lucide-react-native';
+import ProfileScreen from './ProfileScreen';
 
 import { useTheme } from '../context/ThemeContext';
 
@@ -23,6 +25,10 @@ export default function NotificationScreen() {
   const insets = useSafeAreaInsets();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Profile Modal state triggers setup
+  const [selectedProfileUser, setSelectedProfileUser] = useState<string | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   useEffect(() => {
     const uid = auth().currentUser?.uid;
@@ -34,6 +40,20 @@ export default function NotificationScreen() {
 //      .orderBy('createdAt', 'desc') // Need index for this, using client sort for now
       .onSnapshot(snapshot => {
         const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // Batch update unread to Read
+        const batch = firestore().batch();
+        let unreadCount = 0;
+        snapshot.docs.forEach(doc => {
+           if (doc.data().isRead !== true) {
+              batch.update(doc.ref, { isRead: true });
+              unreadCount++;
+           }
+        });
+        if (unreadCount > 0) {
+           batch.commit().catch(err => console.log('Error marking notifications as read:', err));
+        }
+
         // Client-side sort by createdAt desk
         list.sort((a: any, b: any) => {
           const tA = a.createdAt?.seconds || 0;
@@ -51,31 +71,43 @@ export default function NotificationScreen() {
   }, []);
 
   const renderNotification = ({ item }: { item: any }) => {
-    let icon = <Bell size={18} color="#A1A1AA" />;
+    let icon = <Bell size={18} color="#64748B" />;
     let text = '';
     
     if (item.type === 'like') {
-      icon = <Heart size={18} color="#ff4500" fill="#ff4500" />;
+      icon = <Heart size={18} color="#ef4444" fill="#ef4444" />;
       text = 'liked your post';
     } else if (item.type === 'comment') {
-      icon = <MessageSquare size={18} color={Colors.primary} fill={Colors.primary} />;
+      icon = <MessageSquare size={18} color="#8B5CF6" fill="#8B5CF6" />;
       text = `commented: "${item.commentText || ''}"`;
     } else if (item.type === 'post') {
       icon = <Plus size={18} color="#10B981" />;
       text = `posted in c/${item.communityName || 'Community'}`;
     } else if (item.type === 'follow') {
-      icon = <UserPlus size={18} color="#3863FA" />;
+      icon = <UserPlus size={18} color="#3B82F6" />;
       text = 'started following you';
+    } else if (item.type === 'profile_visit') {
+      icon = <Eye size={18} color="#64748B" />;
+      text = 'visited your profile';
     }
 
     return (
-      <View style={[styles.card, { backgroundColor: Colors.surface, borderBottomColor: Colors.border }]}>
+      <TouchableOpacity 
+         style={[styles.card, { backgroundColor: '#ffffff', borderBottomColor: '#F1F5F9', flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1 }]}
+         activeOpacity={0.8}
+         onPress={() => {
+            if (item.actorUid) {
+               setSelectedProfileUser(item.actorUid);
+               setIsProfileModalOpen(true);
+            }
+         }}
+      >
         <View style={styles.iconContainer}>
           {icon}
         </View>
         <View style={styles.info}>
-          <Text style={[styles.mainText, { color: Colors.text === '#ffffff' ? '#E4E4E7' : Colors.text }]}>
-            <Text style={[styles.username, { color: Colors.text }]}>@{item.actorUsername || 'user'}</Text> {text}
+          <Text style={[styles.mainText, { color: '#334155' }]} numberOfLines={1}>
+            <Text style={[styles.username, { color: '#0F172A' }]}>@{item.actorUsername || 'user'}</Text> {text}
           </Text>
           {item.createdAt && (
             <Text style={styles.timeText}>
@@ -83,16 +115,16 @@ export default function NotificationScreen() {
             </Text>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors.background }]}>
-      <StatusBar barStyle={Colors.background === '#F4F4F5' ? 'dark-content' : 'light-content'} />
+    <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
+      <StatusBar barStyle="dark-content" />
       {/* Top Navbar */}
-      <View style={[styles.navbar, { paddingTop: insets.top + 10, height: 60 + insets.top, backgroundColor: Colors.surface, borderBottomColor: Colors.border }]}>
-        <Text style={[styles.navTitle, { color: Colors.text }]}>Notifications</Text>
+      <View style={[styles.navbar, { paddingTop: insets.top + 10, height: 60 + insets.top, backgroundColor: '#ffffff', borderBottomColor: '#E2E8F0' }]}>
+        <Text style={[styles.navTitle, { color: '#0F172A' }]}>Notifications</Text>
       </View>
 
       {loading ? (
@@ -112,6 +144,13 @@ export default function NotificationScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      {/* Profile Modal */}
+      <Modal visible={isProfileModalOpen} transparent={false} animationType="slide" onRequestClose={() => setIsProfileModalOpen(false)}>
+        {selectedProfileUser && (
+          <ProfileScreen userId={selectedProfileUser} onClose={() => setIsProfileModalOpen(false)} />
+        )}
+      </Modal>
     </View>
   );
 }
@@ -119,20 +158,20 @@ export default function NotificationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070708',
+    backgroundColor: '#F8FAFC',
   },
   navbar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    backgroundColor: '#0c0c12',
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
+    borderBottomColor: '#E2E8F0',
   },
   navTitle: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#ffffff',
+    color: '#0F172A',
     letterSpacing: -0.5,
   },
   list: {
@@ -141,18 +180,18 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#101015',
+    backgroundColor: '#ffffff',
     marginBottom: 1,
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.01)',
+    borderBottomColor: '#F1F5F9',
   },
   iconContainer: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#16161E',
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -161,16 +200,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mainText: {
-    color: '#E4E4E7',
+    color: '#334155',
     fontSize: 14,
     lineHeight: 20,
   },
   username: {
     fontWeight: 'bold',
-    color: '#ffffff',
+    color: '#0F172A',
   },
   timeText: {
-    color: '#A1A1AA',
+    color: '#64748B',
     fontSize: 11,
     marginTop: 4,
   },
@@ -180,7 +219,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    color: '#A1A1AA',
+    color: '#64748B',
     fontSize: 14,
   },
 });

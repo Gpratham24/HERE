@@ -17,13 +17,13 @@ import { GoogleSignin } from "@react-native-google-signin/google-signin";import 
   StatusBar,
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { Check, X, Mail, Lock, Eye, EyeOff, MapPin, Headphones } from 'lucide-react-native';
+import { Check, X, Mail, Lock, Eye, EyeOff, MapPin, Headphones, Brain, Rocket, HeartPulse, Music, Compass, Sparkles } from 'lucide-react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { Colors, Sizes } from '../theme/Theme';
 import { useTheme } from '../context/ThemeContext';
 
-const { height } = Dimensions.get('window');
+const { height, width } = Dimensions.get('window');
 
 interface WelcomeScreenProps {
   onComplete: (isNewUser?: boolean) => void;
@@ -104,12 +104,16 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
     });
   };
 
-  const debounceRef = useRef<any>(null);
-
   useEffect(() => {
-    // Removing auto transition to allow manual onboarding pages navigation
-    return () => {};
-  }, []);
+    // Smoother transition into the form layout loaded immediately if already viewed?
+    // Auto advance from Screen 0 (Splash) to Screen 1 after 2 seconds
+    const timer = setTimeout(() => {
+      if (stage === 'splash' && onboardingPage === 0) {
+        handleNextPage();
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [onboardingPage, stage]);
 
   const checkUsername = (val: string) => {
     setUsername(val);
@@ -167,11 +171,11 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
   };
 
   const handleNextPage = () => {
-    if (onboardingPage < 2) {
+    if (onboardingPage < 3) {
       if (onboardingPage === 0) {
         Animated.timing(logoY, {
-          toValue: height / 2 - 120,
-          duration: 300,
+          toValue: 140, // Lift much higher to top center for Onboarding views space below
+          duration: 400,
           useNativeDriver: true,
         }).start();
       }
@@ -267,6 +271,15 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
             email: email.trim(),
             photoURL: uploadedUrl,
             createdAt: firestore.FieldValue.serverTimestamp(),
+            stats: {
+               postsCount: 0,
+               followersCount: 0,
+               followingCount: 0,
+               joinedCommunitiesCount: 0,
+               appreciationsTotal: 0
+            },
+            joinedCommunities: [],
+            savedPosts: []
           });
           await firestore().collection('usernames').doc(username.toLowerCase().trim()).set({ uid });
           onComplete(true);
@@ -302,42 +315,102 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
           ]}
         >
           <Text style={styles.logoMain}>HERE</Text>
-          <Animated.View style={{ opacity: fadeAnim, alignItems: 'center', paddingHorizontal: 32, marginTop: 16 }}>
-            {onboardingPage === 0 ? (
-              <Animated.Text style={styles.tagline}>
-                Find your people. Share what matters.
-              </Animated.Text>
-            ) : onboardingPage === 1 ? (
-              <View style={{ alignItems: 'center' }}>
-                <Text style={styles.pageTitle}>What is HERE?</Text>
-                <Text style={styles.pageSubtitle}>
-                  A space where you connect based on what moves you. Discover communities, share top moments, and stay present with your social circles.
-                </Text>
-              </View>
-            ) : (
-              <View style={{ alignItems: 'center', width: '100%' }}>
-                <Text style={styles.pageTitle}>Core Features</Text>
-                <View style={styles.featureList}>
-                  <View style={styles.featureItem}>
-                    <View style={styles.featureIconBg}>
-                      <Headphones size={18} color="#8B5CF6" />
+          <Animated.View style={{ opacity: fadeAnim, alignItems: 'center', paddingHorizontal: 32, marginTop: 24, width: '100%' }}>
+            {stage === 'form' ? null : (
+              onboardingPage === 0 ? (
+                <Animated.Text style={styles.tagline}>
+                  Find your people. Share what matters.
+                </Animated.Text>
+              ) : onboardingPage === 1 ? (
+                <View style={{ alignItems: 'center', width: '100%' }}>
+                  <Text style={styles.pageTitle}>“Find your people.”</Text>
+                  <Text style={styles.pageSubtitle}>Real communities. No noise.</Text>
+                  
+                  <View style={[styles.visualContainer, { height: height * 0.28, width: '120%' }]}>
+                    <View style={[styles.bubble, { top: 20, left: 30, backgroundColor: '#EDE9FE', borderColor: '#DDD6FE' }]}>
+                      <Brain size={16} color="#8B5CF6" />
+                      <Text style={styles.bubbleText}>AI</Text>
                     </View>
-                    <Text style={styles.featureText}>Listen together over synced streams</Text>
-                  </View>
-                  <View style={styles.featureItem}>
-                    <View style={styles.featureIconBg}>
-                      <MapPin size={18} color="#8B5CF6" />
+
+                    <View style={[styles.bubble, { top: 35, right: 30, backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}>
+                      <Rocket size={16} color="#EF4444" />
+                      <Text style={[styles.bubbleText, { color: '#B91C1C' }]}>Startups</Text>
                     </View>
-                    <Text style={styles.featureText}>Discover hubs and local vibe around you</Text>
-                  </View>
-                  <View style={styles.featureItem}>
-                    <View style={styles.featureIconBg}>
-                      <Check size={18} color="#8B5CF6" />
+
+                    <View style={[styles.bubble, { bottom: 30, left: 40, backgroundColor: '#DCFCE7', borderColor: '#BBF7D0' }]}>
+                      <HeartPulse size={16} color="#10B981" />
+                      <Text style={[styles.bubbleText, { color: '#047857' }]}>Health</Text>
                     </View>
-                    <Text style={styles.featureText}>Engage in spaces that spark interaction</Text>
+
+                    <View style={[styles.bubble, { bottom: 45, right: 50, backgroundColor: '#DBEAFE', borderColor: '#BFDBFE' }]}>
+                      <Music size={16} color="#3B82F6" />
+                      <Text style={[styles.bubbleText, { color: '#1D4ED8' }]}>Music</Text>
+                    </View>
+                    
+                    <View style={styles.centerNode}>
+                      <Sparkles size={18} color="#8B5CF6" />
+                    </View>
                   </View>
                 </View>
-              </View>
+              ) : onboardingPage === 2 ? (
+                <View style={{ alignItems: 'center', width: '100%' }}>
+                  <Text style={styles.pageTitle}>Join communities that matter</Text>
+                  <Text style={styles.pageSubtitle}>Connect through interests, not followers</Text>
+                  
+                  <View style={[styles.visualContainer, { height: height * 0.28, width: width, justifyContent: 'center' }]}>
+                    <View style={styles.cardStack}>
+                      <View style={[styles.card, { transform: [{ rotate: '-2deg' }], marginBottom: -15, opacity: 0.8 }]}>
+                        <View style={styles.cardHeader}>
+                          <Text style={styles.cardTitle}>🚀 Startup & Tech</Text>
+                          <Check size={14} color="#10B981" />
+                        </View>
+                        <Text style={styles.cardSub}>9.4k members active</Text>
+                      </View>
+
+                      <View style={[styles.card, { transform: [{ rotate: '1deg' }], marginBottom: -15, zIndex: 2, borderWidth: 1.5, borderColor: '#8B5CF6' }]}>
+                        <View style={styles.cardHeader}>
+                          <Text style={[styles.cardTitle, { color: '#8B5CF6' }]}>🤖 AI & Innovation</Text>
+                          <Check size={14} color="#10B981" />
+                        </View>
+                        <Text style={styles.cardSub}>14.2k members active</Text>
+                      </View>
+
+                      <View style={[styles.card, { transform: [{ rotate: '-1deg' }], opacity: 0.9 }]}>
+                        <View style={styles.cardHeader}>
+                          <Text style={styles.cardTitle}>🏥 Health & Wellness</Text>
+                          <Check size={14} color="#10B981" />
+                        </View>
+                        <Text style={styles.cardSub}>7.8k members active</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                <View style={{ alignItems: 'center', width: '100%' }}>
+                  <Text style={styles.pageTitle}>No algorithm. Just relevance.</Text>
+                  <Text style={styles.pageSubtitle}>See what matters, not what trends</Text>
+                  
+                  <View style={[styles.visualContainer, { height: height * 0.28, width: width, justifyContent: 'center' }]}>
+                    <View style={styles.feedMock}>
+                      <View style={styles.relevanceTag}>
+                        <Sparkles size={10} color="#8B5CF6" />
+                        <Text style={styles.relevanceText}>Because you follow AI</Text>
+                      </View>
+                      <View style={styles.postHeader}>
+                        <View style={styles.avatarMock} />
+                        <View>
+                          <Text style={styles.postUser}>Dr. Alex Carter</Text>
+                          <Text style={styles.postCommunity}>From AI & Innovation</Text>
+                        </View>
+                      </View>
+                      <Text style={{ fontSize: 12, color: '#334155', lineHeight: 16, marginBottom: 8, textAlign: 'left', width: '100%' }}>
+                        Just published a breakthrough in neural networks. Revisit standard models to see speeds.
+                      </Text>
+                      <View style={styles.postImageMock} />
+                    </View>
+                  </View>
+                </View>
+              )
             )}
           </Animated.View>
         </Animated.View>
@@ -532,7 +605,7 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
           ]}
           pointerEvents={stage === 'splash' ? 'auto' : 'none'}
         >
-          {onboardingPage > 0 && onboardingPage < 2 ? (
+          {onboardingPage > 0 && onboardingPage < 3 ? (
             <TouchableOpacity onPress={() => {
               Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
                 setOnboardingPage(prev => prev - 1);
@@ -544,12 +617,16 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
             }} activeOpacity={0.7}>
               <Text style={styles.skipText}>Back</Text>
             </TouchableOpacity>
+          ) : onboardingPage === 0 ? (
+            <TouchableOpacity onPress={triggerTransition} activeOpacity={0.7}>
+              <Text style={styles.skipText}>Skip ➔</Text>
+            </TouchableOpacity>
           ) : (
             <View style={{ width: 40 }} /> // Spacer to handle dots centered
           )}
           
-          <View style={styles.dotContainer}>
-            {[0, 1, 2].map((i) => (
+          <View style={[styles.dotContainer, { position: 'relative', transform: [{ translateX: 0 }] }]}>
+            {[1, 2, 3].map((i) => (
               <View
                 key={i}
                 style={[
@@ -562,7 +639,7 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
 
           <TouchableOpacity onPress={handleNextPage} activeOpacity={0.7}>
             <Text style={styles.skipText}>
-              {onboardingPage < 2 ? 'Next ➔' : 'Get Started ➔'}
+              {onboardingPage < 3 ? 'Next' : 'Get Started'}
             </Text>
           </TouchableOpacity>
         </Animated.View>
@@ -768,8 +845,8 @@ const styles = StyleSheet.create({
   skipWrapper: {
     position: 'absolute',
     bottom: 40,
-    left: 24,
-    right: 24,
+    left: 32,
+    right: 32,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -777,63 +854,157 @@ const styles = StyleSheet.create({
   skipText: {
     color: '#1E293B',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   pageTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     color: '#0F172A',
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   pageSubtitle: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#64748B',
     textAlign: 'center',
-    lineHeight: 22,
     fontWeight: '500',
   },
-  featureList: {
+  visualContainer: {
     marginTop: 20,
-    width: '100%',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    backgroundColor: '#ffffff',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  featureIconBg: {
-    width: 36,
-    height: 36,
-    backgroundColor: '#EDE9FE',
-    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    position: 'relative',
   },
-  featureText: {
-    flex: 1,
-    fontSize: 14,
+  bubble: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 24,
+    borderWidth: 1,
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    gap: 6,
+  },
+  bubbleText: {
+    fontSize: 13,
     fontWeight: '600',
-    color: '#334155',
+    color: '#6D28D9',
+  },
+  centerNode: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#C084FC',
+    shadowColor: '#a855f7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  cardStack: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  card: {
+    backgroundColor: '#ffffff',
+    width: '90%',
+    padding: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  cardSub: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  feedMock: {
+    width: '90%',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  relevanceTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F3FF',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    gap: 4,
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+  },
+  relevanceText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  postHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 8,
+  },
+  avatarMock: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E2E8F0',
+  },
+  postUser: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  postCommunity: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  postImageMock: {
+    height: 100,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    width: '100%',
   },
   dotContainer: {
     flexDirection: 'row',
     gap: 6,
-    position: 'absolute',
-    left: '50%',
-    transform: [{ translateX: -4 }], // Adjusting centering depending on content width
   },
   dot: {
     width: 8,

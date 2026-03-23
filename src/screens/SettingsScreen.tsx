@@ -21,7 +21,7 @@ interface SettingsScreenProps {
 
 export default function SettingsScreen({ onClose }: SettingsScreenProps) {
   const { userData } = useAuth();
-  const [darkMode, setDarkMode] = useState(userData?.theme !== 'light');
+  const [darkMode, setDarkMode] = useState(userData?.theme === 'dark');
 
   // 🔔 Notifications State
   const [notifLikes, setNotifLikes] = useState(true);
@@ -61,7 +61,7 @@ export default function SettingsScreen({ onClose }: SettingsScreenProps) {
     divider: 'rgba(255,255,255,0.03)',
     statusBarStyle: 'light-content' as const,
   } : {
-    bg: '#F4F4F5',
+    bg: '#F8FAFC',
     card: '#ffffff',
     text: '#18181B',
     subText: '#71717A',

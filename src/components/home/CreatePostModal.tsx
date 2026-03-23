@@ -37,7 +37,7 @@ interface CreatePostModalProps {
 export default function CreatePostModal({ visible, onClose }: CreatePostModalProps) {
   const { userData, user } = useAuth();
   const [content, setContent] = useState('');
-  const [selectedCommunity, setSelectedCommunity] = useState<string | null>(null);
+  const [selectedCommunities, setSelectedCommunities] = useState<string[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [mediaUri, setMediaUri] = useState<string | null>(null);
@@ -45,8 +45,8 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
   const communities = userData?.joinedCommunities || [];
 
   useEffect(() => {
-    if (communities.length === 1 && !selectedCommunity) {
-      setSelectedCommunity(communities[0]);
+    if (communities.length > 0 && selectedCommunities.length === 0) {
+      setSelectedCommunities([communities[0]]);
     }
   }, [communities]);
 
@@ -61,7 +61,7 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
   };
 
   const handlePost = async () => {
-    if (!selectedCommunity || (!content.trim() && !mediaUri)) return;
+    if (selectedCommunities.length === 0 || (!content.trim() && !mediaUri)) return;
     setIsPosting(true);
 
     try {
@@ -71,28 +71,35 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
         uploadedUrl = await uploadToCloudinary(mediaUri);
       }
 
-      const postRef = await firestore().collection('posts').add({
-        userId: user?.uid,
-        username: userData?.username || 'user',
-        communityId: selectedCommunity,
-        communityName: mapIdToName(selectedCommunity),
-        content: content.trim(),
-        mediaUrl: uploadedUrl,
-        mediaType: mediaUri ? (['mp4', 'mov', 'avi', 'mkv'].includes(mediaUri.split('.').pop()?.toLowerCase() || '') ? 'video' : 'image') : null,
-        likesCount: 0,
-        commentsCount: 0,
-        likedBy: [],
-        createdAt: firestore.FieldValue.serverTimestamp(),
-      });
+      const batch = firestore().batch();
+      let primaryPostId = '';
       
-      // Notify Followers
-      if (user?.uid) {
+      selectedCommunities.forEach((cid, index) => {
+         const postRef = firestore().collection('posts').doc();
+         if (index === 0) primaryPostId = postRef.id;
+
+         batch.set(postRef, {
+            userId: user?.uid,
+            username: userData?.username || 'user',
+            communityId: cid,
+            communityName: mapIdToName(cid),
+            content: content.trim(),
+            mediaUrl: uploadedUrl,
+            mediaType: mediaUri ? (['mp4', 'mov', 'avi', 'mkv'].includes(mediaUri.split('.').pop()?.toLowerCase() || '') ? 'video' : 'image') : null,
+            likesCount: 0,
+            commentsCount: 0,
+            likedBy: [],
+            createdAt: firestore.FieldValue.serverTimestamp(),
+         });
+      });
+
+      // Notify Followers (using primaryPostId for reference)
+      if (user?.uid && primaryPostId) {
         const followersSnap = await firestore()
           .collection('followers')
           .where('followedUid', '==', user.uid)
           .get();
 
-        const batch = firestore().batch();
         followersSnap.docs.forEach(doc => {
           const followerUid = doc.data().followerUid;
           const notifRef = firestore().collection('notifications').doc();
@@ -101,18 +108,19 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
             actorUid: user.uid,
             actorUsername: userData?.username || 'user',
             targetUid: followerUid,
-            postId: postRef.id,
-            communityName: mapIdToName(selectedCommunity),
+            postId: primaryPostId,
+            communityName: mapIdToName(selectedCommunities[0]),
             createdAt: firestore.FieldValue.serverTimestamp(),
           });
         });
-        await batch.commit();
       }
+
+      await batch.commit();
 
       // Clear & Close
       setContent('');
       setMediaUri(null);
-      setSelectedCommunity(communities.length === 1 ? communities[0] : null);
+      setSelectedCommunities(communities.length > 0 ? [communities[0]] : []);
       onClose();
     } catch (error) {
       console.error('Error creating post:', error);
@@ -121,7 +129,7 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
     }
   };
 
-  const isButtonDisabled = !selectedCommunity || (!content.trim() && !mediaUri) || isPosting;
+  const isButtonDisabled = selectedCommunities.length === 0 || (!content.trim() && !mediaUri) || isPosting;
 
   return (
     <Modal visible={visible} transparent={true} animationType="slide" onRequestClose={onClose}>
@@ -161,8 +169,12 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
                       activeOpacity={0.8}
                     >
                       <Text style={styles.selectorLabel}>Post in: </Text>
-                      <Text style={styles.selectorValue}>
-                        {selectedCommunity ? mapIdToName(selectedCommunity) : 'Select Community'}
+                      <Text style={styles.selectorValue} numberOfLines={1}>
+                        {!Array.isArray(selectedCommunities) 
+                           ? mapIdToName(selectedCommunities as any) 
+                           : (selectedCommunities.length === 0 
+                              ? 'Select Community' 
+                              : selectedCommunities.map(c => mapIdToName(c)).join(', '))}
                       </Text>
                       <ChevronDown size={16} color={Colors.primary} style={{ marginLeft: 6 }} />
                     </TouchableOpacity>
@@ -174,12 +186,16 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
                             key={id} 
                             style={styles.dropdownItem} 
                             onPress={() => {
-                              setSelectedCommunity(id);
-                              setShowDropdown(false);
+                              setSelectedCommunities(prev => {
+                                 const current = Array.isArray(prev) ? prev : [];
+                                 return current.includes(id) 
+                                    ? current.filter(c => c !== id) 
+                                    : [...current, id];
+                              });
                             }}
                           >
                             <Text style={styles.dropdownText}>{mapIdToName(id)}</Text>
-                            {selectedCommunity === id && (
+                            {Array.isArray(selectedCommunities) && selectedCommunities.includes(id) && (
                               <Check size={16} color={Colors.primary} />
                             )}
                           </TouchableOpacity>
@@ -193,7 +209,7 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
                     <TextInput
                       style={styles.input}
                       placeholder="What's on your mind?"
-                      placeholderTextColor="rgba(255,255,255,0.4)"
+                      placeholderTextColor="#94A3B8"
                       multiline
                       maxLength={300}
                       value={content}
@@ -237,16 +253,16 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
     height: '65%', // Slide up height
-    backgroundColor: '#101015',
+    backgroundColor: '#ffffff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#E2E8F0',
   },
   content: {
     flex: 1,
@@ -259,18 +275,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: '#E2E8F0',
     marginBottom: 20,
   },
   headerBtn: {
     paddingVertical: 8,
   },
   cancelText: {
-    color: '#E4E4E7',
+    color: '#64748B',
     fontSize: 15,
+    fontWeight: '500',
   },
   headerTitle: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 16,
     fontWeight: '700',
   },
@@ -283,7 +300,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   postBtnDisabled: {
-    backgroundColor: 'rgba(56, 99, 250, 0.5)',
+    backgroundColor: '#C4B5FD',
     opacity: 0.6,
   },
   postBtnText: {
@@ -298,16 +315,17 @@ const styles = StyleSheet.create({
   selector: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#16161E',
+    backgroundColor: '#F8FAFC',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    alignSelf: 'flex-start',
+    borderColor: '#E2E8F0',
+    minWidth: 180,
+    maxWidth: '100%',
   },
   selectorLabel: {
-    color: '#A1A1AA',
+    color: '#64748B',
     fontSize: 13,
   },
   selectorValue: {
@@ -320,13 +338,13 @@ const styles = StyleSheet.create({
     top: 42,
     left: 0,
     right: 0,
-    backgroundColor: '#1C1C24',
+    backgroundColor: '#ffffff',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: '#E2E8F0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 5,
   },
@@ -337,28 +355,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
+    borderBottomColor: '#F1F5F9',
   },
   dropdownText: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 14,
   },
   inputWrapper: {
     flex: 1,
-    backgroundColor: '#16161E',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.03)',
+    borderColor: '#E2E8F0',
   },
   input: {
     flex: 1,
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 16,
     lineHeight: 22,
   },
   charCount: {
-    color: '#A1A1AA',
+    color: '#64748B',
     fontSize: 12,
     textAlign: 'right',
     marginTop: 8,
@@ -366,7 +384,7 @@ const styles = StyleSheet.create({
   previewWrapper: {
     width: '100%',
     height: 180,
-    backgroundColor: '#000',
+    backgroundColor: '#E2E8F0',
     marginTop: 16,
     borderRadius: 8,
     overflow: 'hidden',
@@ -381,7 +399,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -394,21 +412,21 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.03)',
+    borderTopColor: '#F1F5F9',
   },
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#16161E',
+    backgroundColor: '#F8FAFC',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
     gap: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#E2E8F0',
   },
   actionText: {
-    color: '#E4E4E7',
+    color: '#475569',
     fontSize: 14,
     fontWeight: '600',
   },

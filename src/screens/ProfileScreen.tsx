@@ -12,6 +12,7 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
+  BackHandler,
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -52,8 +53,14 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const { userData: myData } = useAuth();
   const currentUid = auth().currentUser?.uid;
-  const uid = userId || currentUid;
+  
+  const [viewUid, setViewUid] = useState(userId || currentUid);
+  const uid = viewUid;
   const isMe = uid === currentUid;
+
+  useEffect(() => {
+    setViewUid(userId || currentUid);
+  }, [userId, currentUid]);
 
   const { userData: contextUserData } = useAuth();
   const [localUserData, setLocalUserData] = useState<any>(null);
@@ -73,6 +80,7 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [isPostDetailOpen, setIsPostDetailOpen] = useState(false);
   const [userComments, setUserComments] = useState<any[]>([]);
+  const [savedPosts, setSavedPosts] = useState<any[]>([]);
   const [commentError, setCommentError] = useState(false);
   const [followersLiveCount, setFollowersLiveCount] = useState(0);
   const [followingLiveCount, setFollowingLiveCount] = useState(0);
@@ -84,6 +92,15 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
   const [communityPosts, setCommunityPosts] = useState<any[]>([]);
   const [communityPostsLoading, setCommunityPostsLoading] = useState(false);
   const [createdCommunities, setCreatedCommunities] = useState<string[]>([]);
+  const [uidHistory, setUidHistory] = useState<string[]>([userId || currentUid]);
+  const [countersLoaded, setCountersLoaded] = useState({ doc: false, followers: false, following: false, posts: false });
+  const [gridColumns, setGridColumns] = useState<number>(3);
+
+  useEffect(() => {
+     if (isMe && myData?.gridPreference) {
+        setGridColumns(myData.gridPreference);
+     }
+  }, [myData?.gridPreference, isMe]);
 
   const handleOpenCommunity = (name: string) => {
      setSelectedCommunity(name);
@@ -182,6 +199,25 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
      } catch (e) { console.error('Error list:', e); }
   };
 
+  const handleOpenUserProfile = (targetUid: string) => {
+     if (targetUid === uid) {
+        setIsUsersListOpen(false);
+        return;
+     }
+
+     setUserPosts([]);
+     setUserComments([]);
+     setLocalUserData(null);
+     setIsFollowing(false);
+     setFollowersLiveCount(0);
+     setFollowingLiveCount(0);
+     setCountersLoaded({ doc: false, followers: false, following: false, posts: false });
+
+     setViewUid(targetUid);
+     setUidHistory(prev => [...prev, targetUid]);
+     setIsUsersListOpen(false);
+  };
+
   const handlePickImage = () => {
 
 
@@ -206,6 +242,17 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
           if (snap) setCreatedCommunities(snap.docs.map(doc => doc.data().name));
        });
 
+    // 🔔 Profile Visit Notification Setup triggers
+    if (currentUid && uid !== currentUid) {
+         firestore().collection('notifications').add({
+            type: 'profile_visit',
+            actorUid: currentUid,
+            actorUsername: myData?.username || 'user',
+            targetUid: uid,
+            createdAt: firestore.FieldValue.serverTimestamp()
+         }).catch(() => {});
+    }
+
     if (isMe) return; // AuthContext handles fetching isMe automatically without flicker!
     const unsubscribe = firestore()
       .collection('users')
@@ -214,6 +261,10 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
         if (doc && doc.exists()) {
            const data = doc.data();
            setUserData(data);
+
+           if (data?.gridPreference) {
+              setGridColumns(data.gridPreference);
+           }
            
            // 🧹 Temporary Cleanup logic to remove duplicate testing items
            if (data && data.joinedCommunities) {
@@ -221,8 +272,12 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
               if (list.some((c: string) => c.toLowerCase().includes('community') || c === 'ai-builders')) {
                  firestore().collection('users').doc(uid).update({ joinedCommunities: ['AI Builders'] });
               }
-           }
-        }
+            }
+         }
+         setCountersLoaded(prev => ({ ...prev, doc: true }));
+      }, err => {
+         console.log('User load error:', err);
+         setCountersLoaded(prev => ({ ...prev, doc: true }));
       });
 
     // Check Following status
@@ -234,7 +289,7 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
         .where('followedUid', '==', uid)
         .onSnapshot(snap => {
           setIsFollowing(!snap.empty);
-        });
+        }, err => console.log('Follow Check Denied:', err));
     }
 
     return () => {
@@ -250,14 +305,21 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
       .where('followedUid', '==', uid)
       .onSnapshot(snap => {
          setFollowersLiveCount(snap.size);
-      }, err => console.log('Followers listen denied (Check Firebase Rules):', err.message));
-    
-    const unsubFollowing = firestore()
+         setCountersLoaded(prev => ({ ...prev, followers: true }));
+      }, err => {
+         console.log('Followers listen denied:', err.message);
+         setCountersLoaded(prev => ({ ...prev, followers: true }));
+      });
+        const unsubFollowing = firestore()
       .collection('followers')
       .where('followerUid', '==', uid)
       .onSnapshot(snap => {
          setFollowingLiveCount(snap.size);
-      }, err => console.log('Following listen denied (Check Firebase Rules):', err.message));
+         setCountersLoaded(prev => ({ ...prev, following: true }));
+      }, err => {
+         console.log('Following listen denied (Check Firebase Rules):', err.message);
+         setCountersLoaded(prev => ({ ...prev, following: true }));
+      });
 
     return () => {
       unsubFollowers();
@@ -270,13 +332,43 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
 
       // Fetch User Posts Live
 
-      const unsubscribePosts = firestore()
-        .collection('posts')
-        .where('userId', '==', uid)
-        .onSnapshot(snapshot => {
-          const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setUserPosts(list);
-        }, err => console.log('Posts listen denied (Check Firebase Rules):', err.message));
+      const unsubPosts = firestore()
+      .collection('posts')
+      .where('userId', '==', uid)
+      .onSnapshot(snap => {
+         if (snap) {
+            const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+            // 🔃 Sort client-side safely without crashing index dependencies
+            list.sort((a: any, b: any) => {
+               const tA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+               const tB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+               return tB - tA;
+            });
+
+            // 🤝 Merge duplicate sub-posts into a single card triggers
+            const grouped: any[] = [];
+            list.forEach((p: any) => {
+               const key = `${p.userId}_${p.createdAt?.seconds || p.createdAt?.seconds === undefined ? (p.createdAt?.toDate ? p.createdAt.toDate().getTime() : 0) : p.createdAt?.seconds}_${(p.content || '').substring(0,10)}`;
+               const match = grouped.find(g => {
+                  const gKey = `${g.userId}_${g.createdAt?.seconds || g.createdAt?.seconds === undefined ? (g.createdAt?.toDate ? g.createdAt.toDate().getTime() : 0) : g.createdAt?.seconds}_${(g.content || '').substring(0,10)}`;
+                  return gKey === key;
+               });
+               if (match) {
+                  if (!match.communityNames) match.communityNames = [match.communityName];
+                  if (!match.communityNames.includes(p.communityName)) match.communityNames.push(p.communityName);
+               } else {
+                  p.communityNames = [p.communityName];
+                  grouped.push(p);
+               }
+            });
+
+            setUserPosts(grouped);
+         }
+         setCountersLoaded(prev => ({ ...prev, posts: true }));
+      }, err => {
+         console.log('Posts load error:', err);
+         setCountersLoaded(prev => ({ ...prev, posts: true }));
+      });
 
       // Fetch User Comments across posts (Iterative Workaround to Bypass Index Error)
       const fetchComments = async () => {
@@ -319,11 +411,71 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
       fetchComments();
 
       return () => {
-        unsubscribePosts();
+        unsubPosts();
       };
 
     }
   }, [uid]);
+
+  useEffect(() => {
+    if (!uid) return;
+    const savedIds = userData?.savedPosts || [];
+    if (savedIds.length === 0) {
+       setSavedPosts([]);
+       return;
+    }
+
+    const queryIds = savedIds.slice(0, 10);
+    const unsubscribeSaved = firestore()
+       .collection('posts')
+       .where(firestore.FieldPath.documentId(), 'in', queryIds)
+       .onSnapshot(snapshot => {
+          if (snapshot) {
+             const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+             list.sort((a: any, b: any) => {
+                const tA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+                const tB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+                return tB - tA;
+             });
+             setSavedPosts(list);
+          }
+       }, err => console.log('Saved Fetch Error:', err));
+
+    return () => unsubscribeSaved();
+  }, [userData?.savedPosts, uid]);
+
+  useEffect(() => {
+     const backAction = () => {
+        if (isEditing) { setIsEditing(false); return true; }
+        if (isSettingsOpen) { setIsSettingsOpen(false); return true; }
+        if (isUsersListOpen) { setIsUsersListOpen(false); return true; }
+        if (isPostDetailOpen) { setIsPostDetailOpen(false); return true; }
+        if (selectedCommunity) { setSelectedCommunity(null); return true; }
+        
+        if (uidHistory.length > 1) {
+             const newHist = [...uidHistory];
+             newHist.pop(); 
+             const prevUid = newHist[newHist.length - 1];
+             
+             setUserPosts([]);
+             setUserComments([]);
+             setLocalUserData(null);
+             setIsFollowing(false);
+             setFollowersLiveCount(0);
+             setFollowingLiveCount(0);
+             
+             setUidHistory(newHist);
+             setViewUid(prevUid);
+             return true;
+        }
+        
+        if (onClose) { onClose(); return true; }
+        return false;
+     };
+
+     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+     return () => backHandler.remove();
+  }, [isEditing, isSettingsOpen, isUsersListOpen, isPostDetailOpen, selectedCommunity, uidHistory, onClose]);
 
 
 
@@ -346,7 +498,7 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
             {userPosts.map(post => (
               <TouchableOpacity 
                 key={post.id} 
-                style={styles.gridItem} 
+                style={[styles.gridItem, { width: (width - 4 * (gridColumns + 1)) / gridColumns, height: (width - 4 * (gridColumns + 1)) / gridColumns }]} 
                 activeOpacity={0.9}
                 onPress={() => {
                   setSelectedPost(post);
@@ -356,8 +508,8 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
                 {post.mediaUrl || post.media ? (
                   <Image source={{ uri: post.mediaUrl || post.media }} style={styles.gridImage} />
                 ) : (
-                  <View style={[styles.gridImage, { backgroundColor: '#1C1C24', justifyContent: 'center', alignItems: 'center' }]}>
-                    <Text style={{ color: '#A1A1AA', fontSize: 12 }}>Text Post</Text>
+                  <View style={[styles.gridImage, { backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ color: '#64748B', fontSize: 12 }}>Text Post</Text>
                   </View>
                 )}
                 <View style={styles.gridOverlay}>
@@ -402,10 +554,38 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
 
 
       case 'saved':
+        if (savedPosts.length === 0) {
+          return (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>🔖 No saved posts yet.</Text>
+              <Text style={{ color: '#A1A1AA', fontSize: 11, marginTop: 4 }}>Posts you bookmark will appear here.</Text>
+            </View>
+          );
+        }
         return (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>🔖 No saved posts yet.</Text>
-            <Text style={{ color: '#A1A1AA', fontSize: 11, marginTop: 4 }}>Posts you bookmark will appear here.</Text>
+          <View style={styles.gridList}>
+            {savedPosts.map(post => (
+              <TouchableOpacity 
+                key={post.id} 
+                style={[styles.gridItem, { width: (width - 4 * (gridColumns + 1)) / gridColumns, height: (width - 4 * (gridColumns + 1)) / gridColumns }]} 
+                activeOpacity={0.9}
+                onPress={() => {
+                  setSelectedPost(post);
+                  setIsPostDetailOpen(true);
+                }}
+              >
+                {post.mediaUrl || post.media ? (
+                  <Image source={{ uri: post.mediaUrl || post.media }} style={styles.gridImage} />
+                ) : (
+                  <View style={[styles.gridImage, { backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ color: '#64748B', fontSize: 12 }}>Text Post</Text>
+                  </View>
+                )}
+                <View style={styles.gridOverlay}>
+                  <Text style={styles.gridText} numberOfLines={1}>c/{post.communityName || post.community}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
           </View>
         );
       case 'communities':
@@ -465,8 +645,8 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors.background }]}>
-      <StatusBar barStyle={Colors.background === '#F4F4F5' ? 'dark-content' : 'light-content'} translucent backgroundColor="transparent" />
+    <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
       <ScrollView showsVerticalScrollIndicator={false}>
         
         {/* Cover Photo Container */}
@@ -502,15 +682,27 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
           <Text style={styles.userName}>@{userData?.username || 'user'}</Text>
           <Text style={styles.bio}>{userData?.bio || "Building cool things 🚀"}</Text>
           
+          <Text style={{ color: '#64748B', fontSize: 11, fontStyle: 'italic', marginTop: 3, marginBottom: 8 }}>
+             Joined {userData?.createdAt ? new Date(userData.createdAt.toDate ? userData.createdAt.toDate() : userData.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Join Date Loading'}
+          </Text>
+          
           {/* Stats Bar Component */}
+          {(!isMe && !(countersLoaded.doc && countersLoaded.followers && countersLoaded.following && countersLoaded.posts)) ? (
+            <View style={{ height: 60, justifyContent: 'center', alignItems: 'center' }}>
+               <ActivityIndicator size="small" color={Colors.primary} />
+            </View>
+          ) : (
           <ProfileStats 
+            postsCount={userPosts.length}
             followersCount={followersLiveCount}
             followingCount={followingLiveCount}
             joinedCommunitiesCount={userData?.joinedCommunities?.length || 0}
             isMe={isMe}
             onShowFollowers={() => handleShowList('followers')}
             onShowFollowing={() => handleShowList('following')}
+            visibilitySettings={userData?.visibilitySettings}
           />
+          )}
 
 
 
@@ -535,7 +727,7 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
               </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.shareBtn} activeOpacity={0.8}>
-              <Share2 size={18} color="#ffffff" />
+              <Share2 size={18} color="#0F172A" />
             </TouchableOpacity>
           </View>
 
@@ -557,12 +749,14 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
             <MessageSquare size={18} color={activeTab === 'comments' ? Colors.primary : '#8E8E93'} />
           </TouchableOpacity>
 
+          {(isMe || userData?.visibilitySettings?.showSaved !== false) && (
           <TouchableOpacity 
             style={[styles.tabItem, activeTab === 'saved' && styles.tabItemActive]} 
             onPress={() => setActiveTab('saved')}
           >
             <Bookmark size={18} color={activeTab === 'saved' ? Colors.primary : '#8E8E93'} />
           </TouchableOpacity>
+          )}
 
           <TouchableOpacity 
             style={[styles.tabItem, activeTab === 'communities' && styles.tabItemActive]} 
@@ -571,6 +765,28 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
             <Users size={18} color={activeTab === 'communities' ? Colors.primary : '#8E8E93'} />
           </TouchableOpacity>
         </View>
+
+        {/* 🎛 Grid Columns Sizer Toggle (Only for feeds layout) */}
+        {(activeTab === 'posts' || activeTab === 'saved') && (
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 10, gap: 6 }}>
+             {[1, 2, 3, 4].map(num => (
+                <TouchableOpacity 
+                   key={num} 
+                   onPress={() => {
+                      setGridColumns(num);
+                      if (isMe) {
+                         firestore().collection('users').doc(currentUid).update({
+                            gridPreference: num
+                         }).catch(() => {});
+                      }
+                   }} 
+                   style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: gridColumns === num ? Colors.primary : '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' }}
+                >
+                   <Text style={{ fontSize: 11, color: gridColumns === num ? '#ffffff' : '#475569', fontWeight: '700' }}>{num}</Text>
+                </TouchableOpacity>
+             ))}
+          </View>
+        )}
 
         {/* Tab Body list elements */}
         {renderTabContent()}
@@ -584,12 +800,28 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
             {selectedPost && (
               <View style={styles.postDetailContainer}>
                  {/* Header layout */}
-                 <View style={styles.postDetailHeader}>
-                    <Text style={styles.postDetailTitle}>c/{selectedPost.communityName || selectedPost.community}</Text>
-                    <TouchableOpacity onPress={() => setIsPostDetailOpen(false)}>
-                       <X size={20} color="#ffffff"/>
-                    </TouchableOpacity>
-                 </View>
+                  <View style={styles.postDetailHeader}>
+                     <View style={{ flex: 1, marginRight: 16 }}>
+                        <TouchableOpacity onPress={() => {
+                           setIsPostDetailOpen(false);
+                           setTimeout(() => {
+                              setSelectedCommunity(selectedPost.communityName || selectedPost.community);
+                           }, 300);
+                        }}>
+                           <Text style={styles.postDetailTitle}>
+                              {selectedPost.communityNames && selectedPost.communityNames.length > 1
+                                ? selectedPost.communityNames.map((c: string) => `c/${c}`).join(', ')
+                                : `c/${selectedPost.communityName}`}
+                           </Text>
+                        </TouchableOpacity>
+                        <Text style={{ color: '#64748B', fontSize: 11, marginTop: 2 }}>
+                           {selectedPost.createdAt ? new Date(selectedPost.createdAt.toDate ? selectedPost.createdAt.toDate() : selectedPost.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Today'}
+                        </Text>
+                     </View>
+                     <TouchableOpacity onPress={() => setIsPostDetailOpen(false)}>
+                        <X size={20} color="#0F172A"/>
+                     </TouchableOpacity>
+                  </View>
                  
                  {/* Modal scroll Content */}
                  <ScrollView contentContainerStyle={{ padding: 16 }}>
@@ -621,12 +853,13 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
       </Modal>
 
       {/* Users List Modal for Followers/Following */}
-      <UsersListModal 
-         visible={isUsersListOpen}
-         title={userListTitle}
-         users={usersList}
-         onClose={() => setIsUsersListOpen(false)}
-      />
+       <UsersListModal 
+          visible={isUsersListOpen}
+          title={userListTitle}
+          users={usersList}
+          onClose={() => setIsUsersListOpen(false)}
+          onUserPress={handleOpenUserProfile}
+       />
 
       {/* Settings Modal */}
       <Modal visible={isSettingsOpen} transparent={false} animationType="slide" onRequestClose={() => setIsSettingsOpen(false)}>
@@ -649,11 +882,11 @@ export default function ProfileScreen({ userId, onClose }: ProfileScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070708',
+    backgroundColor: '#F8FAFC',
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
   headerToolbarOverlay: {
@@ -667,15 +900,15 @@ const styles = StyleSheet.create({
   },
   headerIconBtn: {
     padding: 8,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.3)',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   coverPhotoContainer: {
     height: 160,
     width: '100%',
-    backgroundColor: '#16161E',
+    backgroundColor: '#E2E8F0',
   },
   coverPhoto: {
     width: '100%',
@@ -684,7 +917,7 @@ const styles = StyleSheet.create({
   },
   profileInfo: {
     paddingHorizontal: 24,
-    marginTop: -45, // Overlap cover photo
+    marginTop: -45,
     zIndex: 1,
   },
   avatarWrapper: {
@@ -692,9 +925,9 @@ const styles = StyleSheet.create({
     height: 90,
     borderRadius: 45,
     borderWidth: 4,
-    borderColor: '#070708',
+    borderColor: '#F8FAFC',
     marginBottom: 12,
-    alignSelf: 'flex-start', // Align to left like LinkedIn or center? User wants just like inkdein
+    alignSelf: 'flex-start',
   },
   avatar: {
     width: '100%',
@@ -702,13 +935,13 @@ const styles = StyleSheet.create({
     borderRadius: 45,
   },
   userName: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 18,
     fontWeight: '800',
     marginBottom: 6,
   },
   bio: {
-    color: Colors.textMuted,
+    color: '#64748B',
     fontSize: 13,
     textAlign: 'left',
     marginBottom: 20,
@@ -718,12 +951,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
-    backgroundColor: '#101015',
+    backgroundColor: '#ffffff',
     paddingVertical: 14,
     borderRadius: Sizes.radiusMd,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.02)',
+    borderColor: '#E2E8F0',
     marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   statItem: {
     flex: 1,
@@ -733,12 +971,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   statNumber: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 16,
     fontWeight: '800',
   },
   statLabel: {
-    color: Colors.textMuted,
+    color: '#64748B',
     fontSize: 11,
     marginTop: 4,
     textAlign: 'center',
@@ -766,17 +1004,22 @@ const styles = StyleSheet.create({
   shareBtn: {
     width: 42,
     height: 42,
-    backgroundColor: '#16161E',
+    backgroundColor: '#ffffff',
     borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   tabHeader: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
+    borderBottomColor: '#E2E8F0',
   },
   tabItem: {
     flex: 1,
@@ -794,10 +1037,13 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   gridItem: {
-    width: width / 2 - 4,
-    height: width / 2 - 4,
+    width: (width - 12) / 3,
+    height: (width - 12) / 3,
     margin: 2,
-    backgroundColor: '#16161E',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
   },
   gridImage: {
     width: '100%',
@@ -809,22 +1055,31 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.9)',
     paddingVertical: 4,
     paddingHorizontal: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
   },
   gridText: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 11,
     fontWeight: '600',
   },
   listCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#101015',
+    backgroundColor: '#ffffff',
     padding: 12,
     borderRadius: Sizes.radiusMd,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
   },
   listIcon: {
     width: 36,
@@ -834,7 +1089,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   listCardName: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -844,37 +1099,42 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
   emptyText: {
-    color: Colors.textMuted,
+    color: '#64748B',
     fontSize: 14,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
     padding: 24,
   },
   modalContent: {
-    backgroundColor: '#101015',
+    backgroundColor: '#ffffff',
     borderRadius: Sizes.radiusMd,
     padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
   },
   modalTitle: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 18,
     fontWeight: '800',
     marginBottom: 20,
     textAlign: 'center',
   },
   modalInput: {
-    backgroundColor: '#16161E',
+    backgroundColor: '#F8FAFC',
     borderRadius: 8,
     padding: 12,
-    color: '#ffffff',
+    color: '#0F172A',
     minHeight: 80,
     textAlignVertical: 'top',
-    borderColor: 'rgba(255,255,255,0.04)',
+    borderColor: '#E2E8F0',
     borderWidth: 1,
     marginBottom: 20,
   },
@@ -885,7 +1145,7 @@ const styles = StyleSheet.create({
   modalCancel: {
     flex: 1,
     height: 45,
-    backgroundColor: '#1C1C24',
+    backgroundColor: '#F1F5F9',
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
@@ -899,12 +1159,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   postDetailContainer: {
-    backgroundColor: '#101015',
+    backgroundColor: '#ffffff',
     borderRadius: Sizes.radiusMd,
     maxHeight: '80%',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
   },
   postDetailHeader: {
     flexDirection: 'row',
@@ -912,15 +1177,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
+    borderBottomColor: '#E2E8F0',
   },
   postDetailTitle: {
-    color: '#ffffff',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: 'bold',
   },
   postDetailContent: {
-    color: '#E4E4E7',
+    color: '#334155',
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 16,
@@ -930,6 +1195,6 @@ const styles = StyleSheet.create({
     height: width * 0.7,
     borderRadius: 8,
     resizeMode: 'cover',
-    backgroundColor: '#16161E',
+    backgroundColor: '#F1F5F9',
   },
 });
