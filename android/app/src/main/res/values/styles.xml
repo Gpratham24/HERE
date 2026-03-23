@@ -4,6 +4,13 @@
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        
+        <!-- Force Off-White Background immediately on boot -->
+        <item name="android:windowBackground">#F8FAFC</item>
+        
+        <!-- For Android 12+ Splash API -->
+        <item name="android:windowSplashScreenBackground">#F8FAFC</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
     </style>
 
 </resources>

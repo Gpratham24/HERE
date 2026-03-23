@@ -38,6 +38,8 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
   const logoY = useRef(new Animated.Value(height / 2 - 40)).current; // Start centered
   const contentAlpha = useRef(new Animated.Value(0)).current;
   const skipBtnAlpha = useRef(new Animated.Value(1)).current;
+  const [onboardingPage, setOnboardingPage] = useState(0);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   // Form state
   const [email, setEmail] = useState('');
@@ -105,14 +107,8 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
   const debounceRef = useRef<any>(null);
 
   useEffect(() => {
-    // Initial delay hold for splash feel
-    const timer = setTimeout(() => {
-      if (stage === 'splash') {
-        triggerTransition();
-      }
-    }, 2000);
-
-    return () => clearTimeout(timer);
+    // Removing auto transition to allow manual onboarding pages navigation
+    return () => {};
   }, []);
 
   const checkUsername = (val: string) => {
@@ -168,6 +164,32 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
         useNativeDriver: true,
       }),
     ]).start();
+  };
+
+  const handleNextPage = () => {
+    if (onboardingPage < 2) {
+      if (onboardingPage === 0) {
+        Animated.timing(logoY, {
+          toValue: height / 2 - 120,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      }
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }).start(() => {
+        setOnboardingPage(prev => prev + 1);
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      });
+    } else {
+      triggerTransition();
+    }
   };
   const toggleAuthMode = () => {
     setAuthMode(authMode === 'signup' ? 'login' : 'signup');
@@ -280,9 +302,44 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
           ]}
         >
           <Text style={styles.logoMain}>HERE</Text>
-          <Animated.Text style={[styles.tagline, { opacity: skipBtnAlpha }]}>
-            Find your people. Share what matters.
-          </Animated.Text>
+          <Animated.View style={{ opacity: fadeAnim, alignItems: 'center', paddingHorizontal: 32, marginTop: 16 }}>
+            {onboardingPage === 0 ? (
+              <Animated.Text style={styles.tagline}>
+                Find your people. Share what matters.
+              </Animated.Text>
+            ) : onboardingPage === 1 ? (
+              <View style={{ alignItems: 'center' }}>
+                <Text style={styles.pageTitle}>What is HERE?</Text>
+                <Text style={styles.pageSubtitle}>
+                  A space where you connect based on what moves you. Discover communities, share top moments, and stay present with your social circles.
+                </Text>
+              </View>
+            ) : (
+              <View style={{ alignItems: 'center', width: '100%' }}>
+                <Text style={styles.pageTitle}>Core Features</Text>
+                <View style={styles.featureList}>
+                  <View style={styles.featureItem}>
+                    <View style={styles.featureIconBg}>
+                      <Headphones size={18} color="#8B5CF6" />
+                    </View>
+                    <Text style={styles.featureText}>Listen together over synced streams</Text>
+                  </View>
+                  <View style={styles.featureItem}>
+                    <View style={styles.featureIconBg}>
+                      <MapPin size={18} color="#8B5CF6" />
+                    </View>
+                    <Text style={styles.featureText}>Discover hubs and local vibe around you</Text>
+                  </View>
+                  <View style={styles.featureItem}>
+                    <View style={styles.featureIconBg}>
+                      <Check size={18} color="#8B5CF6" />
+                    </View>
+                    <Text style={styles.featureText}>Engage in spaces that spark interaction</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+          </Animated.View>
         </Animated.View>
 
         {/* Lower Content containing taglines and login/signup forms */}
@@ -467,7 +524,7 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
           </ScrollView>
         </Animated.View>
 
-        {/* Floating Skip button visible only in splash loading */}
+        {/* Onboarding Navigation controls visible only in splash loading */}
         <Animated.View
           style={[
             styles.skipWrapper,
@@ -475,8 +532,38 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
           ]}
           pointerEvents={stage === 'splash' ? 'auto' : 'none'}
         >
-          <TouchableOpacity onPress={triggerTransition} activeOpacity={0.7}>
-            <Text style={styles.skipText}>Skip ➔</Text>
+          {onboardingPage > 0 && onboardingPage < 2 ? (
+            <TouchableOpacity onPress={() => {
+              Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+                setOnboardingPage(prev => prev - 1);
+                if (onboardingPage === 1) {
+                  Animated.timing(logoY, { toValue: height / 2 - 40, duration: 300, useNativeDriver: true }).start();
+                }
+                Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+              });
+            }} activeOpacity={0.7}>
+              <Text style={styles.skipText}>Back</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 40 }} /> // Spacer to handle dots centered
+          )}
+          
+          <View style={styles.dotContainer}>
+            {[0, 1, 2].map((i) => (
+              <View
+                key={i}
+                style={[
+                  styles.dot,
+                  onboardingPage === i ? styles.dotActive : styles.dotInactive,
+                ]}
+              />
+            ))}
+          </View>
+
+          <TouchableOpacity onPress={handleNextPage} activeOpacity={0.7}>
+            <Text style={styles.skipText}>
+              {onboardingPage < 2 ? 'Next ➔' : 'Get Started ➔'}
+            </Text>
           </TouchableOpacity>
         </Animated.View>
       </KeyboardAvoidingView>
@@ -680,12 +767,84 @@ const styles = StyleSheet.create({
   },
   skipWrapper: {
     position: 'absolute',
-    bottom: 30,
+    bottom: 40,
+    left: 24,
     right: 24,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   skipText: {
     color: '#1E293B',
     fontSize: 14,
     fontWeight: '600',
+  },
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  pageSubtitle: {
+    fontSize: 15,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  featureList: {
+    marginTop: 20,
+    width: '100%',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    backgroundColor: '#ffffff',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  featureIconBg: {
+    width: 36,
+    height: 36,
+    backgroundColor: '#EDE9FE',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  featureText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  dotContainer: {
+    flexDirection: 'row',
+    gap: 6,
+    position: 'absolute',
+    left: '50%',
+    transform: [{ translateX: -4 }], // Adjusting centering depending on content width
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  dotActive: {
+    backgroundColor: '#8B5CF6',
+    width: 18,
+  },
+  dotInactive: {
+    backgroundColor: '#E2E8F0',
   },
 });
