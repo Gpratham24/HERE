@@ -24,16 +24,26 @@ import { useAuth } from '../context/AuthContext';
 import CommunityViewScreen from './CommunityViewScreen';
 import { useTheme } from '../context/ThemeContext';
 import { Colors } from '../theme/Theme';
-import { Heart, MessageCircle, Share2, Bell, MoreHorizontal, Send, X } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Bell, MoreHorizontal, Send, X, Plus } from 'lucide-react-native';
 import ProfileScreen from './ProfileScreen';
 import PostCard from '../components/home/PostCard';
 
+
+import StoriesBar from '../components/home/StoriesBar';
+import Header from '../components/common/Header';
 
 const { width } = Dimensions.get('window');
 
 // AvatarImage moved to PostCard.tsx
 
-export default function HomeScreen() {
+interface HomeScreenProps {
+  onExploreCommunities: () => void;
+  onCreatePost: () => void;
+  onNotificationPress: () => void;
+  onProfilePress: () => void;
+}
+
+export default function HomeScreen({ onExploreCommunities, onCreatePost, onNotificationPress, onProfilePress }: HomeScreenProps) {
   const { Colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { userData } = useAuth();
@@ -331,37 +341,8 @@ export default function HomeScreen() {
     <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
-      {/* Top Navbar with Safe Area Support */}
-      <View style={[styles.navbar, { paddingTop: insets.top + 10, height: 50 + insets.top, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }]}>
-        <View style={{ gap: 1 }}>
-          <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F172A' }}>HERE</Text>
-          <Text style={{ color: '#64748B', fontSize: 11, fontWeight: '500' }}>Your communities</Text>
-        </View>
-      </View>
-
-      {/* Feed Sections Tab Bar */}
-      <View style={[styles.tabBar, { paddingBottom: 12, paddingTop: 10, gap: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }]}>
-        <TouchableOpacity
-          onPress={() => setActiveTab('communities')}
-          style={[{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }, activeTab === 'communities' ? { backgroundColor: 'rgba(139, 92, 246, 0.12)' } : {}]}
-        >
-          <Text style={[styles.tabText, { color: '#64748B' }, activeTab === 'communities' && { color: Colors.primary || '#8B5CF6', fontWeight: '800' }]}>From communities</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setActiveTab('interests')}
-          style={[{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }, activeTab === 'interests' ? { backgroundColor: 'rgba(139, 92, 246, 0.12)' } : {}]}
-        >
-          <Text style={[styles.tabText, { color: '#64748B' }, activeTab === 'interests' && { color: Colors.primary || '#8B5CF6', fontWeight: '800' }]}>Based on interests</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setActiveTab('discussions')}
-          style={[{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }, activeTab === 'discussions' ? { backgroundColor: 'rgba(139, 92, 246, 0.12)' } : {}]}
-        >
-          <Text style={[styles.tabText, { color: '#64748B' }, activeTab === 'discussions' && { color: Colors.primary || '#8B5CF6', fontWeight: '800' }]}>Active discussions</Text>
-        </TouchableOpacity>
-      </View>
+      {/* 🚀 Top Navbar matched exactly to Screenshot */}
+      <Header onNotificationPress={onNotificationPress} onProfilePress={onProfilePress} />
 
 
       {/* 🏘️ Community Detail View Modal */}
@@ -390,13 +371,36 @@ export default function HomeScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={[styles.feedList, { paddingBottom: 100 }]} // Space for bottom nav
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={<StoriesBar onCreatePost={onCreatePost} />}
           initialNumToRender={10}
           maxToRenderPerBatch={10}
           windowSize={10}
           removeClippedSubviews={true}
           ListEmptyComponent={
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 80 }}>
-              <Text style={{ color: Colors.textMuted, fontSize: 14 }}>No posts found. Start sharing what matters!</Text>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 80, paddingHorizontal: 32 }}>
+              {userData?.joinedCommunities && userData.joinedCommunities.length === 0 ? (
+                <>
+                  <Text style={{ color: '#0F172A', fontSize: 18, fontWeight: '700', marginBottom: 8, textAlign: 'center' }}>Join communities to see posts</Text>
+                  <Text style={{ color: '#64748B', fontSize: 13, textAlign: 'center', marginBottom: 20 }}>Your feed is empty because you aren't in any communities yet.</Text>
+                  <TouchableOpacity 
+                    style={{ backgroundColor: '#8B5CF6', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 24, shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 2 }}
+                    onPress={onExploreCommunities}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Explore Communities</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={{ color: '#0F172A', fontSize: 18, fontWeight: '700', marginBottom: 8, textAlign: 'center' }}>Be the first to post 🚀</Text>
+                  <Text style={{ color: '#64748B', fontSize: 13, textAlign: 'center', marginBottom: 20 }}>This community looks a bit quiet. Start the conversation!</Text>
+                  <TouchableOpacity 
+                    style={{ backgroundColor: '#8B5CF6', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 24, shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 2 }}
+                    onPress={onCreatePost}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Create Post</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           }
         />

@@ -23,7 +23,12 @@ import CommunityViewScreen from './CommunityViewScreen';
 import CreateCommunityModal from '../components/discover/CreateCommunityModal';
 import PostCard from '../components/home/PostCard';
 import ProfileScreen from './ProfileScreen';
+import Header from '../components/common/Header';
 import { useAuth } from '../context/AuthContext';
+import DiscoverHeroBanner from '../components/discover/DiscoverHeroBanner';
+import CategoryGrid from '../components/discover/CategoryGrid';
+import TrendingCommunitiesList from '../components/discover/TrendingCommunitiesList';
+import LiveDiscussionCard from '../components/discover/LiveDiscussionCard';
 
 const { width } = Dimensions.get('window');
 
@@ -31,12 +36,18 @@ const HARDCODED_TOPICS = [
   'AI', 'Startups', 'Coding', 'Fitness', 'Gaming', 'Movies', 'Tech', 'Design'
 ];
 
-export default function DiscoverScreen() {
+interface DiscoverScreenProps {
+  onNotificationPress?: () => void;
+  onProfilePress?: () => void;
+}
+
+export default function DiscoverScreen({ onNotificationPress, onProfilePress }: DiscoverScreenProps) {
   const { Colors } = useTheme();
   const { userData } = useAuth();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [communities, setCommunities] = useState<any[]>([]);
+
   const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [followingStates, setFollowingStates] = useState<Record<string, boolean>>({});
@@ -86,10 +97,24 @@ export default function DiscoverScreen() {
     // 1. Fetch Trending Communities
     const unsubscribeCommunities = firestore()
       .collection('communities')
-      .limit(10)
+      .limit(15)
       .onSnapshot(snapshot => {
         if (snapshot) {
-          const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          let list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          // Smart suggestions: Sort by user interests
+          const userInterests = userData?.interests || [];
+          if (userInterests.length > 0) {
+            list = list.sort((a: any, b: any) => {
+              const aName = a.name.toLowerCase();
+              const bName = b.name.toLowerCase();
+              const aMatch = userInterests.some((interest: string) => aName.includes(interest.toLowerCase()));
+              const bMatch = userInterests.some((interest: string) => bName.includes(interest.toLowerCase()));
+              if (aMatch && !bMatch) return -1;
+              if (!aMatch && bMatch) return 1;
+              return 0;
+            });
+          }
           setCommunities(list);
         }
         setLoading(false);
@@ -112,7 +137,7 @@ export default function DiscoverScreen() {
       unsubscribeCommunities();
       unsubscribeUsers();
     };
-  }, []);
+  }, [userData?.interests]);
 
   useEffect(() => {
     if (!selectedTopic) {
@@ -217,20 +242,8 @@ export default function DiscoverScreen() {
     <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
       <StatusBar barStyle="dark-content" />
       
-      {/* Search Bar with Safe Area */}
-      <View style={[styles.searchContainer, { paddingTop: insets.top + 10 }]}>
-        <View style={styles.searchBar}>
-          <Search size={18} color="#64748B" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search communities, users, posts"
-            placeholderTextColor="#94A3B8"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            clearButtonMode="while-editing"
-          />
-        </View>
-      </View>
+      {/* 🚀 Top Navbar shared everywhere */}
+      <Header onNotificationPress={onNotificationPress} onProfilePress={onProfilePress} />
 
       {selectedCommunity ? (
          <View style={{ flex: 1 }}>
@@ -314,134 +327,34 @@ export default function DiscoverScreen() {
             </ScrollView>
          </View>
       ) : (
-        // Standard Sections
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        // Standard Sections Layout matched exactly to mock reference
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
           
-          <TouchableOpacity style={styles.createMainBtn} onPress={() => setIsCreateModalOpen(true)}>
+          <TouchableOpacity 
+             style={{ backgroundColor: '#ffffff', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 13, marginHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0', gap: 8, marginTop: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1 }} 
+             onPress={() => setIsCreateModalOpen(true)}
+          >
              <Plus size={16} color="#0F172A" />
-             <Text style={styles.createMainBtnText}>Create Community</Text>
+             <Text style={{ color: '#0F172A', fontSize: 13, fontWeight: '700' }}>Create Community</Text>
           </TouchableOpacity>
 
-          {/* 1. Trending Communities */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Flame size={20} color="#F59E0B" />
-              <Text style={styles.sectionTitle}>Trending Communities</Text>
-            </View>
-            
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false} 
-              contentContainerStyle={styles.horizontalScroll}
-            >
-              {communities.length > 0 ? (
-                communities.map(item => (
-                  <View key={item.id} style={styles.communityCard}>
-                    <TouchableOpacity 
-                      activeOpacity={0.8}
-                      onPress={() => setSelectedCommunity(item.name)} 
-                      style={{ alignItems: 'center', width: '100%' }}
-                    >
-                      {item.iconUrl ? (
-                         <Image source={{ uri: item.iconUrl }} style={styles.communityIcon} />
-                      ) : (
-                         <View style={[styles.communityIcon, { backgroundColor: '#3863FA', justifyContent: 'center', alignItems: 'center' }]}>
-                           <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '800' }}>{item.name[0].toUpperCase()}</Text>
-                         </View>
-                      )}
-                      <Text style={styles.communityName} numberOfLines={1}>{item.name}</Text>
-                      <View style={styles.memberCountRow}>
-                        <Users size={12} color="#64748B" />
-                        <Text style={styles.memberCountText}>{item.membersCount || 0}</Text>
-                      </View>
-                    </TouchableOpacity>
+          {/* 1. Top Banner */}
+          <DiscoverHeroBanner />
 
-                    <TouchableOpacity 
-                      style={[
-                        styles.joinBtn, 
-                        joinedCommunities.some(c => c.toLowerCase() === item.name.toLowerCase()) && styles.joinedBtn
-                      ]}
-                      onPress={() => handleJoinToggle(item.name)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.joinBtnText}>
-                        {joinedCommunities.some(c => c.toLowerCase() === item.name.toLowerCase()) ? 'Joined' : 'Join'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.emptyText}>No communities found</Text>
-              )}
-            </ScrollView>
-          </View>
+          {/* 2. Browse Categories */}
+          <CategoryGrid />
 
-          {/* 2. Topics / Interests */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Hash size={20} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>Topics & Interests</Text>
-            </View>
-            
-            <View style={styles.chipContainer}>
-              {HARDCODED_TOPICS.map((topic, index) => (
-                <TouchableOpacity 
-                  key={index} 
-                  style={styles.chip} 
-                  activeOpacity={0.7}
-                  onPress={() => setSelectedTopic(topic)}
-                >
-                  <Text style={styles.chipText}>{topic}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+          {/* 3. Trending Communities */}
+          <TrendingCommunitiesList 
+            communities={communities} 
+            onCommunityPress={(name: string) => setSelectedCommunity(name)} 
+            joinedCommunities={joinedCommunities} 
+            handleJoinToggle={handleJoinToggle} 
+          />
 
-          {/* 3. Suggested Users */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Users size={20} color="#E879F9" />
-              <Text style={styles.sectionTitle}>Suggested Users</Text>
-            </View>
+          {/* 4. Live Discussion card */}
+          <LiveDiscussionCard />
 
-            <View style={styles.usersList}>
-              {suggestedUsers.filter(u => !followingList.includes(u.id)).length > 0 ? (
-                suggestedUsers.filter(u => !followingList.includes(u.id)).map(user => {
-                  const isFollowing = followingList.includes(user.id);
-                  return (
-                    <TouchableOpacity key={user.id} style={styles.userRow} activeOpacity={0.8} onPress={() => setSelectedUserId(user.id)}>
-                      <Image 
-                        source={{ uri: user.avatarUrl || user.photoURL || 'https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=200&q=80' }} 
-                        style={styles.userAvatar} 
-                      />
-                      <View style={styles.userInfo}>
-                        <Text style={styles.username}>@{user.username || 'user'}</Text>
-                        <Text style={styles.userStats}>{user.followersCount || 0} followers</Text>
-                      </View>
-                      <TouchableOpacity 
-                        style={[
-                          styles.followBtn, 
-                          isFollowing && styles.followingBtn
-                        ]} 
-                        onPress={() => handleFollowToggle(user.id)}
-                        activeOpacity={0.8}
-                      >
-                        {isFollowing ? (
-                          <Check size={16} color="#64748B" />
-                        ) : (
-                          <Text style={styles.followBtnText}>Follow</Text>
-                        )}
-                      </TouchableOpacity>
-                    </TouchableOpacity>
-                  );
-                })
-              ) : (
-                <Text style={styles.emptyText}>No suggestions available</Text>
-              )}
-            </View>
-          </View>
-
-          <View style={{ height: 100 }} />
         </ScrollView>
       )}
 

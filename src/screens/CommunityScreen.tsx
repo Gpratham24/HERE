@@ -12,13 +12,14 @@ import {
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { Colors, Sizes } from '../theme/Theme';
+import { useAuth } from '../context/AuthContext';
 
 interface CommunityScreenProps {
   onComplete: () => void;
 }
- 
 
 export default function CommunityScreen({ onComplete }: CommunityScreenProps) {
+  const { userData } = useAuth();
   const [communities, setCommunities] = useState<any[]>([]);
   const [joinedNames, setJoinedNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,16 +27,30 @@ export default function CommunityScreen({ onComplete }: CommunityScreenProps) {
   useEffect(() => {
     const unsubscribe = firestore()
       .collection('communities')
-      .limit(20)
+      .limit(30)
       .onSnapshot(snap => {
         if (snap) {
-          const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          let list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          // Smart suggestions: Sort by user interests
+          const userInterests = userData?.interests || [];
+          if (userInterests.length > 0) {
+            list = list.sort((a: any, b: any) => {
+              const aName = a.name.toLowerCase();
+              const bName = b.name.toLowerCase();
+              const aMatch = userInterests.some((interest: string) => aName.includes(interest.toLowerCase()));
+              const bMatch = userInterests.some((interest: string) => bName.includes(interest.toLowerCase()));
+              if (aMatch && !bMatch) return -1;
+              if (!aMatch && bMatch) return 1;
+              return 0;
+            });
+          }
           setCommunities(list);
         }
         setLoading(false);
       }, err => console.error('Error fetching communities:', err));
     return () => unsubscribe();
-  }, []);
+  }, [userData?.interests]);
 
   const toggleJoin = (name: string) => {
     if (joinedNames.includes(name)) {
@@ -46,7 +61,7 @@ export default function CommunityScreen({ onComplete }: CommunityScreenProps) {
   };
 
   const handleContinue = async () => {
-    if (joinedNames.length < 1) return;
+    if (joinedNames.length < 3) return;
     const uid = auth().currentUser?.uid;
     if (uid) {
       try {
@@ -60,7 +75,7 @@ export default function CommunityScreen({ onComplete }: CommunityScreenProps) {
     onComplete();
   };
 
-  const isContinueEnabled = joinedNames.length >= 1;
+  const isContinueEnabled = joinedNames.length >= 3;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -75,9 +90,9 @@ export default function CommunityScreen({ onComplete }: CommunityScreenProps) {
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }} bounces={false} showsVerticalScrollIndicator={false}>
         <View style={styles.sheetCard}>
           <Text style={styles.formHeader}>Recommended Communities</Text>
-          <Text style={styles.formSubtitle}>Join at least 1 to continue</Text>
+          <Text style={styles.formSubtitle}>Join at least 3 to continue ({joinedNames.length}/3)</Text>
 
-          <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false} style={{ marginBottom: 20 }}>
+          <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false} style={{ marginBottom: 10 }}>
             {loading ? (
               <ActivityIndicator size="large" color="#8B5CF6" style={{ marginTop: 40 }} />
             ) : communities.length > 0 ? (
@@ -106,18 +121,14 @@ export default function CommunityScreen({ onComplete }: CommunityScreenProps) {
             )}
           </ScrollView>
 
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+          <View style={{ marginTop: 10 }}>
             <TouchableOpacity
-              style={[styles.primaryBtn, { flex: 7, marginTop: 0 }, !isContinueEnabled && styles.primaryBtnDisabled]}
+              style={[styles.primaryBtn, !isContinueEnabled && styles.primaryBtnDisabled]}
               activeOpacity={0.8}
               disabled={!isContinueEnabled}
               onPress={handleContinue}
             >
               <Text style={styles.btnText}>Continue</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.skipBtnRow, { flex: 3 }]} activeOpacity={0.8} onPress={onComplete}>
-              <Text style={{ color: '#475569', fontSize: 15, fontWeight: '600' }}>Skip</Text>
             </TouchableOpacity>
           </View>
         </View>

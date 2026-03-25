@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar, Text, View, Animated, StyleSheet, TouchableOpacity, ActivityIndicator, BackHandler } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, Compass, Plus, Bell, User } from 'lucide-react-native';
+import { Home, Compass, Plus, Bell, User, Search, Users } from 'lucide-react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import WelcomeScreen from './src/screens/WelcomeScreen';
@@ -103,15 +103,28 @@ const MainApp = () => {
   const renderTabContent = () => {
     switch (currentTab) {
       case 'home':
-        return <HomeScreen />;
+        return <HomeScreen 
+          onExploreCommunities={() => { setCurrentTab('discover'); setNavHistory(p => [...p, 'discover']); }} 
+          onCreatePost={() => setIsCreateOpen(true)} 
+          onNotificationPress={() => { setCurrentTab('notifications'); setNavHistory(p => [...p, 'notifications']); }}
+          onProfilePress={() => { setCurrentTab('profile'); setNavHistory(p => [...p, 'profile']); }}
+        />;
       case 'discover':
-        return <DiscoverScreen />;
+        return <DiscoverScreen 
+          onNotificationPress={() => { setCurrentTab('notifications'); setNavHistory(p => [...p, 'notifications']); }}
+          onProfilePress={() => { setCurrentTab('profile'); setNavHistory(p => [...p, 'profile']); }}
+        />;
       case 'notifications':
         return <NotificationScreen />;
       case 'profile':
         return <ProfileScreen />;
       default:
-        return <HomeScreen />;
+        return <HomeScreen 
+          onExploreCommunities={() => { setCurrentTab('discover'); setNavHistory(p => [...p, 'discover']); }} 
+          onCreatePost={() => setIsCreateOpen(true)} 
+          onNotificationPress={() => { setCurrentTab('notifications'); setNavHistory(p => [...p, 'notifications']); }}
+          onProfilePress={() => { setCurrentTab('profile'); setNavHistory(p => [...p, 'profile']); }}
+        />;
     }
   };
 
@@ -122,28 +135,21 @@ const MainApp = () => {
 
       <View style={[styles.floatingNav, { bottom: insets.bottom + 12 }]}>
         <TouchableOpacity style={styles.tabItem} onPress={() => { setCurrentTab('home'); setNavHistory(p => [...p, 'home']); }} activeOpacity={0.7}>
-          <Home size={22} color={currentScreenColor(currentTab === 'home')} />
+          <View style={currentTab === 'home' ? { backgroundColor: 'rgba(139, 92, 246, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 } : { paddingHorizontal: 12, paddingVertical: 6 }}>
+            <Home size={22} color={currentScreenColor(currentTab === 'home')} />
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.tabItem} onPress={() => { setCurrentTab('discover'); setNavHistory(p => [...p, 'discover']); }} activeOpacity={0.7}>
-          <Compass size={22} color={currentScreenColor(currentTab === 'discover')} />
+          <View style={currentTab === 'discover' ? { backgroundColor: 'rgba(139, 92, 246, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 } : { paddingHorizontal: 12, paddingVertical: 6 }}>
+            <Search size={22} color={currentScreenColor(currentTab === 'discover')} />
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.createBtn} activeOpacity={0.85} onPress={handleCreatePress}>
           <Animated.View style={[styles.createBtnInner, { transform: [{ scale: scaleAnim }] }]}>
             <Plus size={24} color="#ffffff" />
           </Animated.View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabItem} onPress={() => { setCurrentTab('notifications'); setNavHistory(p => [...p, 'notifications']); }} activeOpacity={0.7}>
-          <View>
-            <Bell size={22} color={currentScreenColor(currentTab === 'notifications')} />
-            {hasUnread && <View style={styles.unreadDot} />}
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabItem} onPress={() => { setCurrentTab('profile'); setNavHistory(p => [...p, 'profile']); }} activeOpacity={0.7}>
-          <User size={22} color={currentScreenColor(currentTab === 'profile')} />
         </TouchableOpacity>
       </View>
 

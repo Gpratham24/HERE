@@ -9,7 +9,7 @@ import {
   TouchableWithoutFeedback,
   Animated,
 } from 'react-native';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Bookmark, ThumbsUp, Lightbulb, HelpCircle, MessageSquare } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Bookmark, ThumbsUp, Lightbulb, HelpCircle, MessageSquare, Star } from 'lucide-react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../../context/ThemeContext';
@@ -88,10 +88,12 @@ export default function PostCard({
   const [likesCount, setLikesCount] = useState(likesCountInitial);
   const timeoutRef = useRef<any>(null);
 
-  // Sync to Firestore push snapshots setup layout
   const [isSaved, setIsSaved] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const toastOpacity = useRef(new Animated.Value(0)).current;
+
+  // 🚀 Animation Value for Heart
+  const heartScale = useRef(new Animated.Value(1)).current;
 
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -105,17 +107,17 @@ export default function PostCard({
     if (!uid || (!item.communityName && !item.community)) return;
     const cName = item.communityName || item.community;
     firestore().collection('communities').doc(cName.toLowerCase().replace(/ /g, '-')).get().then(snap => {
-       if (snap.exists() && snap.data()?.createdBy === uid) {
-          setIsAdmin(true);
-       }
+      if (snap.exists() && snap.data()?.createdBy === uid) {
+        setIsAdmin(true);
+      }
     });
   }, [item.communityName, item.community, uid]);
 
   const handleRejectPost = async () => {
-     setShowOptions(false);
-     try {
-        await firestore().collection('posts').doc(item.id).delete();
-     } catch (e) { console.error('Reject post failed:', e); }
+    setShowOptions(false);
+    try {
+      await firestore().collection('posts').doc(item.id).delete();
+    } catch (e) { console.error('Reject post failed:', e); }
   };
 
   const showToast = (msg: string) => {
@@ -153,12 +155,23 @@ export default function PostCard({
     setLikesCount(likesCountInitial);
   }, [isLikedInitial, likesCountInitial]);
 
+  const animateHeart = () => {
+    Animated.sequence([
+      Animated.timing(heartScale, { toValue: 1.3, duration: 120, useNativeDriver: true }),
+      Animated.spring(heartScale, { toValue: 1, friction: 3, tension: 40, useNativeDriver: true })
+    ]).start();
+  };
+
   const handleLikeToggle = () => {
     if (!uid) return;
 
     const nextIsLiked = !isLiked;
     setIsLiked(nextIsLiked);
     setLikesCount((prev: number) => prev + (nextIsLiked ? 1 : -1));
+
+    if (nextIsLiked) {
+      animateHeart();
+    }
 
     // Clear previous timer triggers continuous fast tapping continuous.
     if (timeoutRef.current) {
@@ -345,8 +358,10 @@ export default function PostCard({
           onPress={handleLikeToggle}
           onLongPress={() => setShowReactions(!showReactions)}
         >
-          <Heart size={18} color={isLiked ? '#8B5CF6' : '#444444'} fill={isLiked ? '#8B5CF6' : 'none'} />
-          <Text style={{ color: isLiked ? '#8B5CF6' : '#444444', fontSize: 12, fontWeight: '600' }}>Appreciate {likesCount > 0 ? `(${likesCount})` : ''}</Text>
+          <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+            <Star size={18} color="#64748B" fill={isLiked ? '#64748B' : 'none'} />
+          </Animated.View>
+          <Text style={{ color: '#64748B', fontSize: 13, fontWeight: '500' }}>{likesCount > 0 ? (likesCount >= 1000 ? `${(likesCount/1000).toFixed(1)}k` : `${likesCount}`) : ''} Appreciate</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }} onPress={onCommentPress}>

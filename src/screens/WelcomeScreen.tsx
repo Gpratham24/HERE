@@ -53,6 +53,7 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
   const [isChecking, setIsChecking] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
   const googleBtnWidth = useRef(new Animated.Value(48)).current;
   const googleTextAlpha = useRef(new Animated.Value(0)).current;
 
@@ -213,6 +214,7 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
           Alert.alert('Error', 'Passwords do not match.');
           return;
         }
+        setAuthLoading(true);
         auth()
           .createUserWithEmailAndPassword(email, password)
           .then(() => {
@@ -223,6 +225,7 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
             }
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
+            setAuthLoading(false);
             setSignupStep(2); // Expand forms
             const handle = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
             setUsername(handle);
@@ -247,6 +250,7 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
             } else {
               Alert.alert('Signup Error', error.message);
             }
+            setAuthLoading(false);
           });
       } else {
         if (!username.trim()) {
@@ -260,29 +264,37 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
 
         const uid = auth().currentUser?.uid;
         const saveProfile = async () => {
-          let uploadedUrl = '';
-          if (avatarUri && uid) {
-            const { uploadToCloudinary } = require('../utils/cloudinary');
-            uploadedUrl = await uploadToCloudinary(avatarUri);
-          }
+          setAuthLoading(true);
+          try {
+             let uploadedUrl = '';
+             if (avatarUri && uid) {
+               const { uploadToCloudinary } = require('../utils/cloudinary');
+               uploadedUrl = await uploadToCloudinary(avatarUri);
+             }
 
-          await firestore().collection('users').doc(uid).set({
-            username: username.trim(),
-            email: email.trim(),
-            photoURL: uploadedUrl,
-            createdAt: firestore.FieldValue.serverTimestamp(),
-            stats: {
-               postsCount: 0,
-               followersCount: 0,
-               followingCount: 0,
-               joinedCommunitiesCount: 0,
-               appreciationsTotal: 0
-            },
-            joinedCommunities: [],
-            savedPosts: []
-          });
-          await firestore().collection('usernames').doc(username.toLowerCase().trim()).set({ uid });
-          onComplete(true);
+             await firestore().collection('users').doc(uid).set({
+               username: username.trim(),
+               email: email.trim(),
+               photoURL: uploadedUrl,
+               createdAt: firestore.FieldValue.serverTimestamp(),
+               stats: {
+                  postsCount: 0,
+                  followersCount: 0,
+                  followingCount: 0,
+                  joinedCommunitiesCount: 0,
+                  appreciationsTotal: 0
+               },
+               joinedCommunities: [],
+               savedPosts: []
+             });
+             await firestore().collection('usernames').doc(username.toLowerCase().trim()).set({ uid });
+             setAuthLoading(false);
+             onComplete(true);
+          } catch (e) {
+             console.error(e);
+             setAuthLoading(false);
+             Alert.alert('Error', 'Failed to complete profile save');
+          }
         };
 
         const { ActivityIndicator } = require('react-native');
@@ -293,10 +305,11 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
         Alert.alert('Error', 'Please enter your email and password.');
         return;
       }
+      setAuthLoading(true);
       auth()
         .signInWithEmailAndPassword(email, password)
         .then(() => onComplete(false))
-        .catch(error => Alert.alert('Login Error', error.message));
+        .catch(error => { Alert.alert('Login Error', error.message); setAuthLoading(false); });
     }
   };
 
@@ -535,12 +548,17 @@ export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
                 style={styles.primaryBtn}
                 onPress={handleAuth}
                 activeOpacity={0.8}
+                disabled={authLoading}
               >
-                <Text style={styles.btnText}>
-                  {authMode === 'signup'
-                    ? (signupStep === 1 ? 'Sign Up' : 'Next')
-                    : 'Login'}
-                </Text>
+                 {authLoading ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                 ) : (
+                    <Text style={styles.btnText}>
+                      {authMode === 'signup'
+                        ? (signupStep === 1 ? 'Sign Up' : 'Next')
+                        : 'Login'}
+                    </Text>
+                 )}
               </TouchableOpacity>
 
               {!(authMode === 'signup' && signupStep === 2) && (

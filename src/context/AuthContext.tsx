@@ -1,6 +1,7 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import { Alert } from 'react-native';
 
 interface AuthContextType {
   user: FirebaseAuthTypes.User | null;
@@ -21,16 +22,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [userData, setUserData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingUserData, setIsLoadingUserData] = useState(true);
+  
+  // 🔑 Unique identifier for THIS application mount cycle.
+  const [currentSessionId] = useState(() => Math.random().toString(36).substring(2, 9));
+  const isSessionRegistered = useRef(false);
 
   useEffect(() => {
     let unsubscribeUser: () => void = () => {};
 
     const unsubscribeAuth = auth().onAuthStateChanged(async (u) => {
+      if (typeof unsubscribeUser === 'function') {
+         try { unsubscribeUser(); } catch (e) {}
+      }
       setUser(u);
       setIsLoading(false);
 
       if (u) {
         setIsLoadingUserData(true);
+
+        // 📝 Register current device session
+        firestore().collection('users').doc(u.uid).update({
+           currentSessionId: currentSessionId
+        })
+        .then(() => {
+          isSessionRegistered.current = true;
+        })
+        .catch(() => {
+          isSessionRegistered.current = true;
+        });
         // Setup Live Listener for User Document
         unsubscribeUser = firestore()
           .collection('users')
@@ -38,7 +57,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           .onSnapshot(
             (doc) => {
               if (doc.exists()) {
-                setUserData(doc.data());
+                const data = doc.data();
+                setUserData(data);
+
+                // 🚨 Single Session Authentication Gate
+                if (isSessionRegistered.current && data?.currentSessionId && data.currentSessionId !== currentSessionId) {
+                   Alert.alert("Session Ended", "You have been logged out because another device logged into this account.");
+                   auth().signOut().catch(() => {});
+                }
               } else {
                 setUserData(null);
               }
@@ -52,6 +78,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       } else {
         setUserData(null);
         setIsLoadingUserData(false);
+        isSessionRegistered.current = false;
       }
     });
 
