@@ -1,6 +1,6 @@
-# 📱 OpenAudience - Complete App Flow & Architecture (MVP)
+# 📱 HERE - Complete App Flow & Architecture (MVP)
 
-This document outlines the end-to-end data and navigation flow for the **OpenAudience Native Application**.
+This document outlines the end-to-end data and navigation flow for the **HERE Native Application**.
 
 ---
 

@@ -21,14 +21,26 @@ export default function LiveDiscussionCard() {
       </Text>
 
       <View style={styles.actionRow}>
-        <TouchableOpacity style={styles.enterBtn} activeOpacity={0.85}>
-           <Mic size={16} color="#ffffff" style={{ marginRight: 6 }} />
-           <Text style={styles.enterText}>Enter Room</Text>
+        <TouchableOpacity
+          style={styles.enterBtn}
+          activeOpacity={0.85}
+          onPress={() => {/* Navigate to room or handle entry */ }}
+          accessibilityRole="button"
+          accessibilityHint="Joins the live discussion room"
+        >
+          <Mic size={16} color="#ffffff" style={{ marginRight: 6 }} />
+          <Text style={styles.enterText}>Enter Room</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.favBtn} activeOpacity={0.85}>
-           <Heart size={16} color="#7C3AED" fill="#7C3AED" style={{ marginRight: 6 }} />
-           <Text style={styles.favText}>Appreciate</Text>
+        <TouchableOpacity
+          style={styles.favBtn}
+          activeOpacity={0.85}
+          onPress={() => {/* Handle appreciation action */ }}
+          accessibilityRole="button"
+          accessibilityHint="Shows appreciation for this discussion"
+        >
+          <Heart size={16} color="#7C3AED" fill="#7C3AED" style={{ marginRight: 6 }} />
+          <Text style={styles.favText}>Appreciate</Text>
         </TouchableOpacity>
       </View>
     </View>

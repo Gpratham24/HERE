@@ -29,17 +29,6 @@ export default function Header({ onNotificationPress, onProfilePress }: HeaderPr
          <TouchableOpacity activeOpacity={0.7} onPress={onNotificationPress} style={styles.actionBtn}>
             <Bell size={22} color="#475569" />
          </TouchableOpacity>
-         <TouchableOpacity activeOpacity={0.7} onPress={onProfilePress} style={styles.actionBtn}>
-            {userData?.photoURL ? (
-              <Image source={{ uri: userData.photoURL }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarFallback}>
-                 <Text style={styles.fallbackText}>
-                    {userData?.username?.substring(0,1).toUpperCase() || 'U'}
-                 </Text>
-              </View>
-            )}
-         </TouchableOpacity>
       </View>
     </View>
   );

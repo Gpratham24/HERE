@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import firestore from '@react-native-firebase/firestore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Sizes } from '../../theme/Theme';
 import { ChevronDown, Check, Camera, X } from 'lucide-react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -32,10 +33,12 @@ const mapIdToName = (id: string) => {
 interface CreatePostModalProps {
   visible: boolean;
   onClose: () => void;
+  initialCommunity?: string;
 }
 
-export default function CreatePostModal({ visible, onClose }: CreatePostModalProps) {
+export default function CreatePostModal({ visible, onClose, initialCommunity }: CreatePostModalProps) {
   const { userData, user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [content, setContent] = useState('');
   const [selectedCommunities, setSelectedCommunities] = useState<string[]>([]);
   const [isPosting, setIsPosting] = useState(false);
@@ -43,12 +46,19 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
   const [mediaUri, setMediaUri] = useState<string | null>(null);
 
   const communities = userData?.joinedCommunities || [];
+  const displayCommunities = initialCommunity && !communities.includes(initialCommunity) 
+    ? [initialCommunity, ...communities] 
+    : communities;
 
   useEffect(() => {
-    if (communities.length > 0 && selectedCommunities.length === 0) {
-      setSelectedCommunities([communities[0]]);
+    if (visible) {
+      if (initialCommunity) {
+        setSelectedCommunities([initialCommunity]);
+      } else if (communities.length > 0 && selectedCommunities.length === 0) {
+        setSelectedCommunities([communities[0]]);
+      }
     }
-  }, [communities]);
+  }, [visible, initialCommunity, communities]);
 
   const handlePickMedia = () => {
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, (res) => {
@@ -132,16 +142,16 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
   const isButtonDisabled = selectedCommunities.length === 0 || (!content.trim() && !mediaUri) || isPosting;
 
   return (
-    <Modal visible={visible} transparent={true} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent={true} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.backdrop}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <SafeAreaView style={styles.sheetContainer}>
+            <View style={styles.sheetContainer}>
               <KeyboardAvoidingView 
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
               >
-                <View style={styles.content}>
+                <View style={[styles.content, { paddingBottom: insets.bottom + 20 }]}>
                   {/* Header */}
                   <View style={styles.header}>
                     <TouchableOpacity onPress={onClose} style={styles.headerBtn}>
@@ -181,7 +191,7 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
 
                     {showDropdown && (
                       <View style={styles.dropdown}>
-                        {communities.map((id: string) => (
+                        {displayCommunities.map((id: string) => (
                           <TouchableOpacity 
                             key={id} 
                             style={styles.dropdownItem} 
@@ -242,7 +252,7 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
 
                 </View>
               </KeyboardAvoidingView>
-            </SafeAreaView>
+            </View>
           </TouchableWithoutFeedback>
         </View>
       </TouchableWithoutFeedback>
@@ -253,16 +263,22 @@ export default function CreatePostModal({ visible, onClose }: CreatePostModalPro
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)', // Darker backdrop
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    height: '65%', // Slide up height
+    height: '68%',
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
     borderColor: '#E2E8F0',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
   content: {
     flex: 1,

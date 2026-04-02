@@ -1,10 +1,9 @@
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
-import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import { Alert } from 'react-native';
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import { Session, User } from '@supabase/supabase-js';
+import { supabase } from '../utils/supabase';
 
 interface AuthContextType {
-  user: FirebaseAuthTypes.User | null;
+  user: User | null;
   userData: any | null;
   isLoading: boolean;
   isLoadingUserData: boolean;
@@ -18,75 +17,66 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingUserData, setIsLoadingUserData] = useState(true);
-  
-  // 🔑 Unique identifier for THIS application mount cycle.
-  const [currentSessionId] = useState(() => Math.random().toString(36).substring(2, 9));
-  const isSessionRegistered = useRef(false);
 
   useEffect(() => {
-    let unsubscribeUser: () => void = () => {};
-
-    const unsubscribeAuth = auth().onAuthStateChanged(async (u) => {
-      if (typeof unsubscribeUser === 'function') {
-         try { unsubscribeUser(); } catch (e) {}
-      }
-      setUser(u);
-      setIsLoading(false);
-
-      if (u) {
-        setIsLoadingUserData(true);
-
-        // 📝 Register current device session
-        firestore().collection('users').doc(u.uid).update({
-           currentSessionId: currentSessionId
-        })
-        .then(() => {
-          isSessionRegistered.current = true;
-        })
-        .catch(() => {
-          isSessionRegistered.current = true;
-        });
-        // Setup Live Listener for User Document
-        unsubscribeUser = firestore()
-          .collection('users')
-          .doc(u.uid)
-          .onSnapshot(
-            (doc) => {
-              if (doc.exists()) {
-                const data = doc.data();
-                setUserData(data);
-
-                // 🚨 Single Session Authentication Gate
-                if (isSessionRegistered.current && data?.currentSessionId && data.currentSessionId !== currentSessionId) {
-                   Alert.alert("Session Ended", "You have been logged out because another device logged into this account.");
-                   auth().signOut().catch(() => {});
-                }
-              } else {
-                setUserData(null);
-              }
-              setIsLoadingUserData(false);
-            },
-            (err) => {
-              console.log('Error listening to user data (Check Firebase Rules):', err.message);
-              setIsLoadingUserData(false);
-            }
-          );
-      } else {
-        setUserData(null);
+    // 1. Check active session initially
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (!session?.user) {
+        setIsLoading(false);
         setIsLoadingUserData(false);
-        isSessionRegistered.current = false;
       }
     });
 
+    // 2. Listen for auth changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setUser(session?.user ?? null);
+      
+      if (!session?.user) {
+        setUserData(null);
+        setIsLoadingUserData(false);
+        setIsLoading(false);
+        return;
+      }
+      
+      setIsLoading(false);
+    });
+
     return () => {
-      unsubscribeAuth();
-      unsubscribeUser();
+      authListener.subscription.unsubscribe();
     };
   }, []);
+
+  // 3. Fetch custom user data from our new V2 'users' table
+  useEffect(() => {
+    let isMounted = true;
+    
+    const fetchUserData = async () => {
+      if (!user) return;
+      
+      setIsLoadingUserData(true);
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+        
+      if (error) {
+         console.warn("User data fetch error:", error);
+      } else if (isMounted && data) {
+         setUserData(data);
+      }
+      if (isMounted) setIsLoadingUserData(false);
+    };
+
+    fetchUserData();
+
+    return () => { isMounted = false; }
+  }, [user]);
 
   return (
     <AuthContext.Provider value={{ user, userData, isLoading, isLoadingUserData }}>

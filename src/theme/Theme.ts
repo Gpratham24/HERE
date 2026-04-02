@@ -1,22 +1,53 @@
 export const Colors = {
-  background: '#0B0B0F', // Main Screen Dark Background
-  surface: '#FFFFFF', // Pure White Cards
-  surfaceHover: '#F5F5F7', // Off-white secondary surface
-  primary: '#8B5CF6', // Accent Purple
-  accent: '#2563eb', 
-  text: '#111111', // Card Text Primary
-  textMuted: '#6B6B6B', // Card Text Secondary
-  border: '#E5E7EB',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  gold: '#facc15',
+  background: '#FFFFFF', // Pure white core
+  softBg: '#F8F7FF', // Deeper lavender-tinted background 
+  surface: '#FFFFFF', 
+  primary: '#5B4FE1', // More vibrant, slightly deeper primary
+  primaryLight: '#EEEDFF', // Active highlights
+  accent: '#7C3AED', // Royal Purple accent
+  text: '#0F172A', // Slate 900 for modern feel
+  textSecondary: '#475569', // Slate 600
+  textTertiary: '#94A3B8', // Slate 400
+  border: '#F1F5F9',
+  success: '#10B981',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  teal: '#14B8A6', // Refined teal
+  softPink: '#FFF1F2', // Rose 50
+  lavender: '#F5F3FF', // Violet 50
+  white: '#FFFFFF',
+  cardShadow: 'rgba(91, 79, 225, 0.08)',
 };
 
 export const Sizes = {
-  radiusLg: 24,
-  radiusMd: 16,
-  radiusSm: 8,
-  padding: 16,
-  gap: 12,
+  radiusFull: 99,
+  radiusLg: 32,
+  radiusMd: 20, // Increased for softer feel
+  radiusSm: 12, // Increased for softer feel
+  padding: 24,
+  gap: 16,
+};
+
+export const Shadows = {
+  soft: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03, // Subtler
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  medium: {
+    shadowColor: '#5B4FE1',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1, // Stronger but refined
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  premium: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.05,
+    shadowRadius: 40,
+    elevation: 15,
+  }
 };

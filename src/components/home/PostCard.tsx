@@ -352,7 +352,7 @@ export default function PostCard({
       )}
 
       {/* 💖 Action Bar consistent CTAs */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24, marginTop: 16 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, paddingHorizontal: 4 }}>
         <TouchableOpacity
           style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
           onPress={handleLikeToggle}
@@ -361,17 +361,19 @@ export default function PostCard({
           <Animated.View style={{ transform: [{ scale: heartScale }] }}>
             <Star size={18} color="#64748B" fill={isLiked ? '#64748B' : 'none'} />
           </Animated.View>
-          <Text style={{ color: '#64748B', fontSize: 13, fontWeight: '500' }}>{likesCount > 0 ? (likesCount >= 1000 ? `${(likesCount/1000).toFixed(1)}k` : `${likesCount}`) : ''} Appreciate</Text>
+          <Text style={{ color: '#64748B', fontSize: 13, fontWeight: '600' }}>
+            {likesCount > 0 ? (likesCount >= 1000 ? `${(likesCount/1000).toFixed(1)}k` : `${likesCount}`) : ''} Appreciate
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }} onPress={onCommentPress}>
           <MessageSquare size={18} color="#444444" />
-          <Text style={{ color: '#444444', fontSize: 12, fontWeight: '600' }}>Discuss</Text>
+          <Text style={{ color: '#444444', fontSize: 13, fontWeight: '600' }}>Discuss</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }} onPress={handleSaveToggle}>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 60, justifyContent: 'flex-end' }} onPress={handleSaveToggle}>
           <Bookmark size={18} color={isSaved ? '#8B5CF6' : '#444444'} fill={isSaved ? '#8B5CF6' : 'none'} />
-          <Text style={{ color: isSaved ? '#8B5CF6' : '#444444', fontSize: 12, fontWeight: '600' }}>{isSaved ? 'Saved' : 'Save'}</Text>
+          <Text style={{ color: isSaved ? '#8B5CF6' : '#444444', fontSize: 13, fontWeight: '600' }}>{isSaved ? 'Saved' : 'Save'}</Text>
         </TouchableOpacity>
       </View>
 

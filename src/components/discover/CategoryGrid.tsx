@@ -20,7 +20,7 @@ export default function CategoryGrid() {
         <TouchableOpacity style={styles.viewAll}>
           <Text style={styles.viewAllText}>View all</Text>
           <View style={{ marginLeft: 4, transform: [{ scale: 0.8 }] }}>
-             <TerminalSquare size={14} color="#8B5CF6" />
+            <TerminalSquare size={14} color="#8B5CF6" />
           </View>
         </TouchableOpacity>
       </View>
@@ -29,15 +29,22 @@ export default function CategoryGrid() {
         {CATEGORIES.map(item => {
           const IconComponent = item.icon;
           return (
-            <TouchableOpacity key={item.id} style={styles.card} activeOpacity={0.8}>
-               <View style={styles.iconContainer}>
-                  <IconComponent size={24} color={item.color} />
-                  <View style={[styles.bgCircle, { backgroundColor: item.color, opacity: 0.05 }]} />
-               </View>
-               <View style={styles.textContainer}>
-                  <Text style={styles.cardTitle}>{item.title}</Text>
-                  <Text style={styles.cardCount}>{item.count}</Text>
-               </View>
+            <TouchableOpacity
+              key={item.id}
+              style={styles.card}
+              activeOpacity={0.8}
+              onPress={() => { /* TODO: Navigate to category */ }}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.title} category, ${item.count}`}
+            >
+              <View style={styles.iconContainer}>
+                <IconComponent size={24} color={item.color} />
+                <View style={[styles.bgCircle, { backgroundColor: item.color, opacity: 0.05 }]} />
+              </View>
+              <View style={styles.textContainer}>
+                <Text style={styles.cardTitle}>{item.title}</Text>
+                <Text style={styles.cardCount}>{item.count}</Text>
+              </View>
             </TouchableOpacity>
           );
         })}

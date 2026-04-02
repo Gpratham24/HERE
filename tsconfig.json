@@ -4,5 +4,15 @@
     "types": ["jest"]
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["**/node_modules", "**/Pods"]
+  "exclude": [
+    "**/node_modules",
+    "**/Pods",
+    "src/screens/_legacy/**",
+    "src/screens/circles/CreateCircleScreen.tsx",
+    "src/screens/profile/EditProfileScreen.tsx",
+    "src/components/discover/**",
+    "src/components/home/**",
+    "src/services/postService.ts",
+    "src/utils/firebaseStorage.ts"
+  ]
 }

@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions } from 'react-native';
-import { Heart } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -28,7 +27,7 @@ export default function TrendingCommunitiesList({ communities, onCommunityPress,
                      {/* Image Header with Live Badge */}
                      <View style={styles.imageContainer}>
                         <Image 
-                          source={{ uri: item.imageUrl || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=500' }} 
+                          source={{ uri: item.bannerUrl || item.imageUrl || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=500' }} 
                           style={styles.bgImage} 
                         />
                         <View style={styles.liveBadge}>
@@ -45,7 +44,7 @@ export default function TrendingCommunitiesList({ communities, onCommunityPress,
                            </View>
                            <View>
                               <Text style={styles.communityName}>{item.name}</Text>
-                              <Text style={styles.memberCount}>{item.membersCount || 204} Members</Text>
+                              <Text style={styles.memberCount}>{item.membersCount || 0} Members</Text>
                            </View>
                         </View>
 
@@ -53,17 +52,23 @@ export default function TrendingCommunitiesList({ communities, onCommunityPress,
                            {item.description || 'A sanctuary for perfectionists to share feedback, resources and insights.'}
                         </Text>
 
-                        {/* Actions Row */}
+                        {/* Actions Row - Both buttons properly shown */}
                         <View style={styles.actionRow}>
                            <TouchableOpacity 
-                             style={[styles.discussBtn, isJoined && styles.joinedBtn]} 
+                             style={styles.discussBtn} 
                              activeOpacity={0.8}
                              onPress={() => onCommunityPress(item.name)}
                            >
-                              <Text style={[styles.discussText, isJoined && styles.joinedText]}>{isJoined ? 'Joined' : 'Discuss'}</Text>
+                              <Text style={styles.discussText}>Discuss</Text>
                            </TouchableOpacity>
-                           <TouchableOpacity style={styles.favBtn} activeOpacity={0.8} onPress={() => handleJoinToggle(item.name)}>
-                              <Heart size={16} color={isJoined ? '#7C3AED' : '#475569'} fill={isJoined ? '#7C3AED' : 'none'} />
+                           <TouchableOpacity 
+                             style={[styles.smallJoinBtn, isJoined && styles.smallJoinedBtn]} 
+                             activeOpacity={0.8} 
+                             onPress={() => handleJoinToggle(item.name)}
+                           >
+                              <Text style={[styles.smallJoinText, isJoined && styles.smallJoinedText]}>
+                                 {isJoined ? 'Joined' : 'Join'}
+                              </Text>
                            </TouchableOpacity>
                         </View>
                      </View>
@@ -194,37 +199,38 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   discussBtn: {
-    flex: 1,
+    flex: 1.5,
     backgroundColor: '#7C3AED',
-    paddingVertical: 11,
+    paddingVertical: 10,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
   },
   discussText: {
     color: '#ffffff',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  joinedBtn: {
-    backgroundColor: 'rgba(124, 58, 237, 0.08)',
-    shadowOpacity: 0,
-  },
-  joinedText: {
-    color: '#7C3AED',
-  },
-  favBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    backgroundColor: '#F8FAFC',
+  smallJoinBtn: {
+    flex: 1,
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 10,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  smallJoinText: {
+    color: '#475569',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  smallJoinedBtn: {
+    backgroundColor: 'rgba(124, 58, 237, 0.08)',
+    borderColor: 'rgba(124, 58, 237, 0.1)',
+  },
+  smallJoinedText: {
+    color: '#7C3AED',
   },
 });
