@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,145 +7,208 @@ import {
   SafeAreaView,
   StatusBar,
   ScrollView,
-  ActivityIndicator,
+  TextInput,
+  Dimensions,
 } from 'react-native';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import { Colors, Sizes } from '../theme/Theme';
-import { useAuth } from '../context/AuthContext';
+import {
+  ArrowLeft,
+  Camera,
+  Plus,
+  GraduationCap,
+  Home,
+  Briefcase,
+  Globe,
+  Sparkles,
+  Lock,
+} from 'lucide-react-native';
+import { Colors } from '../../theme/Theme';
 
-interface CommunityScreenProps {
-  onComplete: () => void;
+const { width } = Dimensions.get('window');
+
+interface CreateCircleScreenProps {
+  onComplete?: () => void;
+  onBack?: () => void;
 }
 
-export default function CommunityScreen({ onComplete }: CommunityScreenProps) {
-  const { userData } = useAuth();
-  const [communities, setCommunities] = useState<any[]>([]);
-  const [joinedNames, setJoinedNames] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+const CATEGORIES = [
+  { id: '12th-grade', label: '12th Grade Friends', icon: GraduationCap },
+  { id: 'hostel-college', label: 'Hostel / College', icon: Home },
+  { id: 'work-internship', label: 'Work / Internship', icon: Briefcase },
+  { id: 'long-distance', label: 'Long Distance Friends', icon: Globe },
+  { id: 'other', label: 'Other', icon: Sparkles },
+];
 
-  useEffect(() => {
-    const unsubscribe = firestore()
-      .collection('communities')
-      .limit(30)
-      .onSnapshot(snap => {
-        if (snap) {
-          let list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+export default function CreateCircleScreen({
+  onComplete,
+  onBack,
+}: CreateCircleScreenProps) {
+  const [circleName, setCircleName] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('hostel-college');
+  const [privacy, setPrivacy] = useState<'private' | 'public'>('private');
 
-          // Smart suggestions: Sort by user interests
-          const userInterests = userData?.interests || [];
-          if (userInterests.length > 0) {
-            list = list.sort((a: any, b: any) => {
-              const aName = (a.name || '').toLowerCase();
-              const bName = (b.name || '').toLowerCase();
-              const aMatch = userInterests.some((interest: string) => aName.includes(interest.toLowerCase()));
-              const bMatch = userInterests.some((interest: string) => bName.includes(interest.toLowerCase()));
-              if (aMatch && !bMatch) return -1;
-              if (!aMatch && bMatch) return 1;
-              return 0;
-            });
-          }
-          setCommunities(list);
-        }
-        setLoading(false);
-      }, err => console.error('Error fetching communities:', err));
-    return () => unsubscribe();
-  }, [userData?.interests]);
-
-  const toggleJoin = (name: string) => {
-    if (joinedNames.includes(name)) {
-      setJoinedNames(joinedNames.filter(n => n !== name));
-    } else {
-      setJoinedNames([...joinedNames, name]);
-    }
-  };
-
-  const handleContinue = async () => {
-    if (joinedNames.length < 3) return;
-    const uid = auth().currentUser?.uid;
-    if (uid) {
-      try {
-        const batch = firestore().batch();
-        const userRef = firestore().collection('users').doc(uid);
-        
-        // Update user
-        batch.set(userRef, {
-          joinedCommunities: joinedNames
-        }, { merge: true });
-
-        // Update each community member count
-        joinedNames.forEach(name => {
-          const formattedId = name.toLowerCase().replace(/ /g, '-');
-          const commRef = firestore().collection('communities').doc(formattedId);
-          batch.update(commRef, { membersCount: firestore.FieldValue.increment(1) });
-        });
-
-        await batch.commit();
-      } catch (err) {
-        console.error('Error updating communities:', err);
-      }
-    }
-    onComplete();
-  };
-
-  const isContinueEnabled = joinedNames.length >= 3;
+  const maxChars = 20;
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Floating Logo above sheet */}
-      <View style={styles.logoWrapper}>
-        <Text style={styles.logoMain}>HERE</Text>
-        <Text style={styles.tagline}>Find your people. Share what matters.</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={onBack}>
+          <ArrowLeft size={24} color="#0F172A" />
+        </TouchableOpacity>
+        <View style={styles.progressBarContainer}>
+          <View style={[styles.progressBar, { width: '40%' }]} />
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }} bounces={false} showsVerticalScrollIndicator={false}>
-        <View style={styles.sheetCard}>
-          <Text style={styles.formHeader}>Recommended Communities</Text>
-          <Text style={styles.formSubtitle}>Join at least 3 to continue ({joinedNames.length}/3)</Text>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Title & Subtitle */}
+        <Text style={styles.title}>Create your{'\n'}circle</Text>
+        <Text style={styles.subtitle}>
+          This is your private space. Only people you invite can see what
+          happens here.
+        </Text>
 
-          <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false} style={{ marginBottom: 10 }}>
-            {loading ? (
-              <ActivityIndicator size="large" color="#8B5CF6" style={{ marginTop: 40 }} />
-            ) : communities.length > 0 ? (
-              communities.map(community => {
-                const isJoined = joinedNames.includes(community.name);
-                return (
-                  <View key={community.id} style={styles.card}>
-                    <View style={styles.cardInfo}>
-                      <Text style={styles.cardName}>{community.name}</Text>
-                      <Text style={styles.cardMembers}>{community.membersCount || 0} members</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.joinBtn, isJoined && styles.joinedBtn]}
-                      activeOpacity={0.8}
-                      onPress={() => toggleJoin(community.name)}
-                    >
-                      <Text style={[styles.joinBtnText, isJoined && styles.joinedBtnText]}>
-                        {isJoined ? 'Joined' : 'Join'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })
-            ) : (
-              <Text style={{ color: '#64748B', textAlign: 'center', marginTop: 40 }}>No communities found</Text>
-            )}
-          </ScrollView>
-
-          <View style={{ marginTop: 10 }}>
-            <TouchableOpacity
-              style={[styles.primaryBtn, !isContinueEnabled && styles.primaryBtnDisabled]}
-              activeOpacity={0.8}
-              disabled={!isContinueEnabled}
-              onPress={handleContinue}
-            >
-              <Text style={styles.btnText}>Continue</Text>
-            </TouchableOpacity>
-          </View>
+        {/* Circle Photo */}
+        <View style={styles.photoContainer}>
+          <TouchableOpacity style={styles.photoPicker}>
+            <View style={styles.dashedCircle}>
+              <Camera size={24} color="#94A3B8" />
+              <View style={styles.plusOverlay}>
+                <Plus size={16} color="#FFFFFF" strokeWidth={3} />
+              </View>
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.photoLabel}>Set Circle Photo</Text>
         </View>
+
+        {/* Circle Name Input */}
+        <View style={styles.inputSection}>
+          <View style={styles.inputHeader}>
+            <Text style={styles.inputLabel}>CIRCLE NAME</Text>
+            <Text style={styles.inputCount}>
+              {circleName.length}/{maxChars}
+            </Text>
+          </View>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Hostel Crew"
+            placeholderTextColor="#94A3B8"
+            value={circleName}
+            onChangeText={text => setCircleName(text.slice(0, maxChars))}
+          />
+          <Text style={styles.inputHint}>
+            Pick a name that feels like your group
+          </Text>
+        </View>
+
+        {/* Category Selection */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>What's this circle for?</Text>
+          {CATEGORIES.map(cat => (
+            <TouchableOpacity
+              key={cat.id}
+              style={styles.categoryCard}
+              onPress={() => setSelectedCategory(cat.id)}
+            >
+              <View style={styles.categoryIconContainer}>
+                <cat.icon size={20} color="#0F172A" />
+              </View>
+              <Text style={styles.categoryLabel}>{cat.label}</Text>
+              <View
+                style={[
+                  styles.radioButton,
+                  selectedCategory === cat.id && styles.radioButtonActive,
+                ]}
+              >
+                {selectedCategory === cat.id && (
+                  <View style={styles.radioButtonInner} />
+                )}
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Privacy Setting */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Privacy Setting</Text>
+
+          {/* Private Option */}
+          <TouchableOpacity
+            style={[
+              styles.privacyCard,
+              privacy === 'private' && styles.privacyCardActive,
+            ]}
+            onPress={() => setPrivacy('private')}
+          >
+            <View style={styles.categoryIconContainer}>
+              <Lock
+                size={20}
+                color={privacy === 'private' ? Colors.primary : '#0F172A'}
+              />
+            </View>
+            <View style={styles.privacyInfo}>
+              <Text style={styles.privacyLabel}>Private</Text>
+              <Text style={styles.privacyHint}>
+                Only members can see content
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.radioButton,
+                privacy === 'private' && styles.radioButtonActive,
+              ]}
+            >
+              {privacy === 'private' && (
+                <View style={styles.radioButtonInner} />
+              )}
+            </View>
+          </TouchableOpacity>
+
+          {/* Public Option */}
+          <TouchableOpacity
+            style={[
+              styles.privacyCard,
+              privacy === 'public' && styles.privacyCardActive,
+            ]}
+            onPress={() => setPrivacy('public')}
+          >
+            <View style={styles.categoryIconContainer}>
+              <Globe
+                size={20}
+                color={privacy === 'public' ? Colors.primary : '#0F172A'}
+              />
+            </View>
+            <View style={styles.privacyInfo}>
+              <Text style={styles.privacyLabel}>Public</Text>
+              <Text style={styles.privacyHint}>Anyone can find and join</Text>
+            </View>
+            <View
+              style={[
+                styles.radioButton,
+                privacy === 'public' && styles.radioButtonActive,
+              ]}
+            >
+              {privacy === 'public' && <View style={styles.radioButtonInner} />}
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Spacer for button visibility */}
+        <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Fixed Footer Button */}
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.createButton} onPress={onComplete}>
+          <Text style={styles.createButtonText}>Create Circle</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -153,134 +216,238 @@ export default function CommunityScreen({ onComplete }: CommunityScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
   },
-  logoWrapper: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
+  header: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    flexDirection: 'row',
     alignItems: 'center',
-    zIndex: 10,
-    top: 60,
+    backgroundColor: '#FFFFFF',
   },
-  logoMain: {
-    fontSize: 54,
-    fontWeight: '900',
-    color: '#0F172A',
-    letterSpacing: -2,
-    textTransform: 'uppercase',
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  tagline: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 8,
-    textAlign: 'center',
-    fontWeight: '500',
+  progressBarContainer: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 3,
+    marginLeft: 20,
+    overflow: 'hidden',
   },
-  sheetCard: {
-    backgroundColor: '#ffffff',
-    padding: 24,
-    paddingTop: 44,
-    borderTopLeftRadius: 40,
-    borderTopRightRadius: 40,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.04,
-    shadowRadius: 15,
-    elevation: 10,
-    marginTop: 180,
+  progressBar: {
+    height: '100%',
+    backgroundColor: Colors.primary,
+    borderRadius: 3,
+  },
+  scrollView: {
     flex: 1,
   },
-  formHeader: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#0F172A',
-    textAlign: 'center',
-    marginBottom: 6,
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 20,
   },
-  formSubtitle: {
+  title: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#0F172A',
+    lineHeight: 52,
+    letterSpacing: -1.5,
+    marginBottom: 20,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: '#475569',
+    lineHeight: 22,
+    marginBottom: 40,
+  },
+  photoContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  photoPicker: {
+    marginBottom: 12,
+  },
+  dashedCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  plusOverlay: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  photoLabel: {
     fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  inputSection: {
     marginBottom: 32,
   },
-  grid: {
+  inputHeader: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    marginBottom: 10,
   },
-  chip: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    backgroundColor: '#ffffff',
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+    letterSpacing: 0.5,
+  },
+  inputCount: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  textInput: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    height: 56,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#0F172A',
+    fontWeight: '500',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: 'transparent',
+  },
+  inputHint: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 8,
+  },
+  section: {
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 16,
+  },
+  categoryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#F1F5F9',
+    // Minimal shadow for white cards
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
     elevation: 2,
   },
-  chipSelected: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
+  categoryIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
   },
-  chipText: {
-    color: '#475569',
-    fontSize: 15,
+  categoryLabel: {
+    flex: 1,
+    fontSize: 16,
     fontWeight: '600',
+    color: '#0F172A',
   },
-  chipTextSelected: {
-    color: '#ffffff',
-    fontWeight: '700',
+  radioButton: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  primaryBtn: {
-    height: 52,
-    backgroundColor: '#8B5CF6',
+  radioButtonActive: {
+    borderColor: Colors.primary,
+  },
+  radioButtonInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: Colors.primary,
+  },
+  privacyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#F1F5F9',
+  },
+  privacyCardActive: {
+    borderColor: Colors.primary,
+    backgroundColor: '#F5F3FF', // Very light purple
+  },
+  privacyInfo: {
+    flex: 1,
+  },
+  privacyLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  privacyHint: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingBottom: 40,
+  },
+  createButton: {
+    height: 56,
+    backgroundColor: Colors.primary,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
-    shadowColor: '#8B5CF6',
+    shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  primaryBtnDisabled: {
-    backgroundColor: '#C4B5FD',
-    elevation: 0,
-    shadowOpacity: 0,
-  },
-  btnText: {
-    color: '#ffffff',
+  createButtonText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
-  list: { gap: 16 },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  cardInfo: { flex: 1 },
-  cardName: { fontSize: 16, fontWeight: '700', color: '#0F172A', marginBottom: 4 },
-  cardMembers: { fontSize: 12, color: '#64748B', fontWeight: '500' },
-  joinBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#8B5CF6' },
-  joinedBtn: { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
-  joinBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
-  joinedBtnText: { color: '#475569', fontWeight: '600' },
-  skipBtnRow: { height: 52, backgroundColor: '#ffffff', borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
 });

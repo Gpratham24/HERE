@@ -1,35 +1,42 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  SafeAreaView, 
-  KeyboardAvoidingView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Alert,
   ScrollView,
-  Animated
+  Animated,
 } from 'react-native';
-import { useAuthStore } from '../../store/authStore';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
-import { Colors, Shadows, Sizes } from '../../theme/Theme';
+import { Colors, Shadows } from '../../theme/Theme';
 import { Lock, ChevronRight } from 'lucide-react-native';
+import * as api from '../../services/api';
+import { setSessionToken } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
-const LoginScreen = ({ navigation }: any) => {
-  const [email, setEmail] = useState('');
+const LoginScreen = ({ navigation, route }: any) => {
+  const [email, setEmail] = useState(route.params?.email || '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  const setUser = useAuthStore((state) => state.setUser);
-  
+
+  const { setBiometricUnlocked } = useAuth();
+
   // Handover Animations
   const contentFadeAnim = useRef(new Animated.Value(0)).current;
   const contentMoveAnim = useRef(new Animated.Value(20)).current;
 
+  // Update email if it's passed from Signup
   useEffect(() => {
+    if (route.params?.email) {
+      setEmail(route.params.email);
+    }
+
     // Graceful fade-up for content
     Animated.parallel([
       Animated.timing(contentFadeAnim, {
@@ -41,50 +48,83 @@ const LoginScreen = ({ navigation }: any) => {
         toValue: 0,
         friction: 8,
         useNativeDriver: true,
-      })
+      }),
     ]).start();
-  }, [contentFadeAnim, contentMoveAnim]);
+  }, [route.params?.email, contentFadeAnim, contentMoveAnim]);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter email and password');
+    if (!email.trim() || !password.trim()) {
+      Alert.alert(
+        'Fields Required',
+        'Please enter both your email address and password to continue.',
+      );
       return;
     }
 
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      // Use Backend Proxy Login
+      const data = await api.login(email.trim(), password.trim());
 
-    if (error) {
-      Alert.alert('Login Failed', error.message);
+      if (data.access_token || data.session) {
+        const access_token = data.access_token || data.session?.access_token;
+        const refresh_token = data.refresh_token || data.session?.refresh_token;
+
+        if (access_token) {
+          setSessionToken(access_token);
+          // CRITICAL: Tell the Supabase client about the new session!
+          await supabase.auth.setSession({
+            access_token,
+            refresh_token: refresh_token || '',
+          });
+          
+          // Mark biometric as passed since we just logged in with password
+          setBiometricUnlocked(true);
+        }
+      }
+    } catch (err: any) {
+      const msg = err.message.toLowerCase();
+      if (
+        msg.includes('invalid login credentials') ||
+        msg.includes('incorrect')
+      ) {
+        Alert.alert(
+          'Login Incorrect',
+          'The email or password you entered is incorrect. Please check and try again.',
+        );
+      } else {
+        Alert.alert('Login Failed', err.message);
+      }
+    } finally {
       setLoading(false);
-    } else {
-      setUser(data.user);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.header}>
             <Text style={styles.logo}>HERE</Text>
             <View style={styles.line} />
             <Text style={styles.tagline}>Private Social for Real Circles</Text>
           </View>
 
-          <Animated.View style={[
-            styles.form,
-            { 
-              opacity: contentFadeAnim, 
-              transform: [{ translateY: contentMoveAnim }] 
-            }
-          ]}>
+          <Animated.View
+            style={[
+              styles.form,
+              {
+                opacity: contentFadeAnim,
+                transform: [{ translateY: contentMoveAnim }],
+              },
+            ]}
+          >
             <TextInput
               style={styles.input}
               placeholder="Email Address"
@@ -103,7 +143,7 @@ const LoginScreen = ({ navigation }: any) => {
               placeholderTextColor="#94A3B8"
             />
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.loginBtn}
               onPress={handleLogin}
               disabled={loading}
@@ -119,23 +159,28 @@ const LoginScreen = ({ navigation }: any) => {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => navigation.navigate('Signup')}
               style={styles.signupLink}
             >
               <Text style={styles.signupLinkText}>
-                No account? <Text style={{ color: Colors.primary, fontWeight: '700' }}>Sign Up</Text>
+                No account?{' '}
+                <Text style={{ color: Colors.primary, fontWeight: '700' }}>
+                  Sign Up
+                </Text>
               </Text>
             </TouchableOpacity>
           </Animated.View>
 
-          <Animated.View style={[
-            styles.footer,
-            { 
-              opacity: contentFadeAnim, 
-              transform: [{ translateY: contentMoveAnim }] 
-            }
-          ]}>
+          <Animated.View
+            style={[
+              styles.footer,
+              {
+                opacity: contentFadeAnim,
+                transform: [{ translateY: contentMoveAnim }],
+              },
+            ]}
+          >
             <View style={styles.footerDivider} />
             <View style={styles.securityRow}>
               <Lock size={12} color="#94A3B8" />

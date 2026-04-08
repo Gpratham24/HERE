@@ -1,16 +1,18 @@
 import React, { useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Animated, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  Animated,
   StatusBar,
-  Dimensions
+  Dimensions,
 } from 'react-native';
+import { useAuth } from '../../context/AuthContext';
 
 const { height } = Dimensions.get('window');
 
 const SplashScreen = ({ navigation }: any) => {
+  const { user, userData, profileError } = useAuth();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const moveAnim = useRef(new Animated.Value(0)).current;
@@ -27,38 +29,42 @@ const SplashScreen = ({ navigation }: any) => {
         toValue: 1,
         friction: 10,
         useNativeDriver: true,
-      })
+      }),
     ]).start();
 
     // Stage 2: Move Full Header UP (Logo + Line + Tagline)
     const moveTimer = setTimeout(() => {
       Animated.timing(moveAnim, {
-        toValue: -(height / 2 - 140), // Adjusted target for full header block
+        toValue: -(height / 2 - 140),
         duration: 800,
         useNativeDriver: true,
       }).start(() => {
-        // Handover immediately
-        navigation.replace('Signup');
+        // Auth Logic Handover
+        if (profileError) {
+          navigation.replace('Login');
+        } else if (user && !userData) {
+          navigation.replace('Intro');
+        } else if (!user) {
+          navigation.replace('Login');
+        }
+        // If both exist, RootNavigator handles the jump to Main automatically
       });
     }, 1400);
 
     return () => clearTimeout(moveTimer);
-  }, [fadeAnim, scaleAnim, moveAnim, navigation]);
+  }, [fadeAnim, scaleAnim, moveAnim, navigation, user, userData]);
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
-      <Animated.View 
+
+      <Animated.View
         style={[
-          styles.content, 
-          { 
+          styles.content,
+          {
             opacity: fadeAnim,
-            transform: [
-              { scale: scaleAnim },
-              { translateY: moveAnim }
-            ]
-          }
+            transform: [{ scale: scaleAnim }, { translateY: moveAnim }],
+          },
         ]}
       >
         <Text style={styles.logo}>HERE</Text>

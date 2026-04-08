@@ -1,19 +1,20 @@
 import React from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  SafeAreaView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
   Animated,
-  Dimensions
 } from 'react-native';
-import { Colors, Shadows, Sizes } from '../../theme/Theme';
+import { Shadows } from '../../theme/Theme';
 import { Plus, Users } from 'lucide-react-native';
+import { useAuth } from '../../context/AuthContext';
 
 const ChoiceScreen = ({ navigation, route }: any) => {
   const user = route.params?.user;
-  
+  const { refreshProfile, user: authUser } = useAuth();
+
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   const slideAnim = React.useRef(new Animated.Value(20)).current;
 
@@ -28,9 +29,24 @@ const ChoiceScreen = ({ navigation, route }: any) => {
         toValue: 0,
         friction: 8,
         useNativeDriver: true,
-      })
+      }),
     ]).start();
   }, [fadeAnim, slideAnim]);
+
+  const handleSkip = async () => {
+    const currentUser = user || authUser;
+    if (!currentUser) {
+      navigation.replace('Signup');
+      return;
+    }
+
+    try {
+      // Finalize onboarding state - refreshProfile will set userData in context
+      await refreshProfile();
+    } catch (error) {
+      console.error('Choice Skip Error:', error);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -40,14 +56,16 @@ const ChoiceScreen = ({ navigation, route }: any) => {
         <Text style={styles.tagline}>Private Social for Real Circles</Text>
       </View>
 
-      <Animated.View style={[
-        styles.content,
-        { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
-      ]}>
-        <Text style={styles.headline}>How do you{"\n"}want to start?</Text>
+      <Animated.View
+        style={[
+          styles.content,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+        ]}
+      >
+        <Text style={styles.headline}>How do you{'\n'}want to start?</Text>
 
         <View style={styles.cardContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.card}
             activeOpacity={0.9}
             onPress={() => navigation.navigate('CreateCircle', { user })}
@@ -57,11 +75,13 @@ const ChoiceScreen = ({ navigation, route }: any) => {
             </View>
             <View style={styles.cardText}>
               <Text style={styles.cardTitle}>Create a Circle</Text>
-              <Text style={styles.cardSubtext}>Start your own private space</Text>
+              <Text style={styles.cardSubtext}>
+                Start your own private space
+              </Text>
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.card}
             activeOpacity={0.9}
             onPress={() => navigation.navigate('JoinCircle', { user })}
@@ -71,10 +91,16 @@ const ChoiceScreen = ({ navigation, route }: any) => {
             </View>
             <View style={styles.cardText}>
               <Text style={styles.cardTitle}>Join a Circle</Text>
-              <Text style={styles.cardSubtext}>Enter an invite code or link</Text>
+              <Text style={styles.cardSubtext}>
+                Enter an invite code or link
+              </Text>
             </View>
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
+          <Text style={styles.skipText}>Skip for now</Text>
+        </TouchableOpacity>
       </Animated.View>
     </SafeAreaView>
   );
@@ -155,6 +181,17 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontWeight: '500',
     marginTop: 4,
+  },
+  skipBtn: {
+    marginTop: 40,
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  skipText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#94A3B8',
+    textDecorationLine: 'underline',
   },
 });
 

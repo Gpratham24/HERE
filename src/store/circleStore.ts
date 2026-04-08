@@ -1,80 +1,190 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getHomeData,
+  logCheckIn,
+  updatePresence,
+  addReaction,
+  getCircles,
+} from '../services/api';
 import { supabase } from '../utils/supabase';
 
-interface Circle {
+export type UserStatus =
+  | 'studying'
+  | 'gym'
+  | 'coding'
+  | 'free'
+  | 'resting'
+  | 'focus'
+  | 'offline';
+
+export interface Member {
   id: string;
-  name: string;
-  description?: string;
+  username: string;
   avatar_url?: string;
-  member_count?: number;
-  last_activity_at?: string;
+  live_status: UserStatus;
+  last_seen_at?: string;
+}
+
+export interface CheckIn {
+  id: string;
+  user_id: string;
+  circle_id: string;
+  type: 'done' | 'missed' | 'focus' | 'resting';
+  note?: string;
+  created_at: string;
+}
+
+export interface Reaction {
+  id: number;
+  user_id: string;
+  post_id: string;
+  emoji: string;
+}
+
+export interface Post {
+  id: string;
+  user_id: string;
+  circle_id: string;
+  content_url: string;
+  caption?: string;
+  type: string;
+  created_at: string;
+  reactions: Reaction[];
 }
 
 interface CircleState {
-  circles: Circle[];
-  activeCircle: Circle | null;
+  hasCircle: boolean;
+  circle: any | null;
+  members: Member[];
+  myPresence: UserStatus;
+  todayCheckIn: CheckIn | null;
+  posts: Post[];
+  stats: { streak: number };
+  allCircles: any[];
   isLoading: boolean;
   error: string | null;
 
-  setCircles: (circles: Circle[]) => void;
-  setActiveCircle: (circle: Circle | null) => void;
-  setLoading: (loading: boolean) => void;
-
-  fetchUserCircles: (userId: string) => Promise<void>;
+  // Actions
+  fetchHomeData: (circleId?: string) => Promise<void>;
+  fetchAllCircles: () => Promise<void>;
+  switchCircle: (circleId: string) => Promise<void>;
+  setPresence: (status: UserStatus) => Promise<void>;
+  submitCheckIn: (type: CheckIn['type'], note?: string) => Promise<void>;
+  reactToPost: (postId: string, emoji: string) => Promise<void>;
+  updateMemberPresence: (userId: string, status: UserStatus) => void;
 }
 
-export const useCircleStore = create<CircleState>((set) => ({
-  circles: [],
-  activeCircle: null,
-  isLoading: false,
-  error: null,
+export const useCircleStore = create<CircleState>()(
+  persist(
+    (set, get) => ({
+      hasCircle: false,
+      circle: null,
+      members: [],
+      myPresence: 'free',
+      todayCheckIn: null,
+      posts: [],
+      stats: { streak: 0 },
+      allCircles: [],
+      isLoading: false,
+      error: null,
 
-  setCircles: (circles) => set({ circles }),
-  setActiveCircle: (activeCircle) => set({ activeCircle }),
-  setLoading: (isLoading) => set({ isLoading }),
+      fetchHomeData: async (circleId?: string) => {
+        const isInitialFetch = get().members.length === 0;
+        if (isInitialFetch) set({ isLoading: true });
 
-  // Reads go direct to Supabase — fastest path, no extra hop
-  fetchUserCircles: async (userId) => {
-    set({ isLoading: true, error: null });
+        try {
+          const data = await getHomeData(circleId); // Note: updated api.ts might be needed for optional ID
+          if (data.has_circle || circleId) {
+            set({
+              hasCircle: true,
+              circle: data.circle,
+              myPresence: (data.my_presence as UserStatus) || 'free',
+              members: data.members || [],
+              todayCheckIn: data.today_checkin,
+              posts: data.recent_posts || [],
+              stats: data.stats || { streak: 0 },
+            });
+          } else {
+            set({ hasCircle: false });
+          }
+        } catch (err: any) {
+          set({ error: err.message });
+        } finally {
+          set({ isLoading: false });
+        }
+      },
 
-    // 1. Get circle memberships for this user
-    const { data: memberData, error: memberError } = await supabase
-      .from('circle_members')
-      .select('circle_id')
-      .eq('user_id', userId);
+      fetchAllCircles: async () => {
+        try {
+          const circles = await getCircles();
+          set({ allCircles: circles || [] });
+        } catch (err) {
+          console.error('Fetch All Circles Error:', err);
+        }
+      },
 
-    if (memberError || !memberData?.length) {
-      set({ circles: [], isLoading: false });
-      return;
-    }
+      switchCircle: async (circleId: string) => {
+        set({ isLoading: true });
+        await get().fetchHomeData(circleId);
+        set({ isLoading: false });
+      },
 
-    const circleIds = memberData.map((m: any) => m.circle_id);
+      setPresence: async (status: UserStatus) => {
+        try {
+          await updatePresence(status);
+          set({ myPresence: status });
+          const { data } = await supabase.auth.getUser();
+          if (data.user?.id) {
+            get().updateMemberPresence(data.user.id, status);
+          }
+        } catch (err: any) {
+          console.error('Update Presence Error:', err);
+        }
+      },
 
-    // 2. Fetch full circle details with member count
-    const { data: circlesData, error: circlesError } = await supabase
-      .from('circles')
-      .select(`
-        id,
-        name,
-        description,
-        avatar_url,
-        last_activity_at,
-        circle_members(count)
-      `)
-      .in('id', circleIds)
-      .order('last_activity_at', { ascending: false });
+      submitCheckIn: async (type: CheckIn['type'], note?: string) => {
+        const { circle } = get();
+        if (!circle) return;
 
-    if (circlesError) {
-      set({ error: circlesError.message, isLoading: false });
-      return;
-    }
+        try {
+          const resp = await logCheckIn(circle.id, type, note);
+          set({ todayCheckIn: resp.checkin, stats: { streak: resp.streak } });
+        } catch (err: any) {
+          console.error('Log CheckIn Error:', err);
+        }
+      },
 
-    // Normalize member_count from the nested count query
-    const normalized = (circlesData || []).map((c: any) => ({
-      ...c,
-      member_count: c.circle_members?.[0]?.count ?? 0,
-    }));
+      reactToPost: async (postId: string, emoji: string) => {
+        try {
+          await addReaction(postId, emoji);
+        } catch (err: any) {
+          console.error('Reaction Error:', err);
+        }
+      },
 
-    set({ circles: normalized, isLoading: false });
-  },
-}));
+      updateMemberPresence: (userId: string, status: UserStatus) => {
+        const { members } = get();
+        const updatedMembers = members.map(m =>
+          m.id === userId ? { ...m, live_status: status } : m,
+        );
+        set({ members: updatedMembers });
+      },
+    }),
+    {
+      name: 'circle-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: state => ({
+        hasCircle: state.hasCircle,
+        circle: state.circle,
+        members: state.members,
+        myPresence: state.myPresence,
+        todayCheckIn: state.todayCheckIn,
+        posts: state.posts,
+        stats: state.stats,
+        allCircles: state.allCircles,
+      }),
+    },
+  ),
+);

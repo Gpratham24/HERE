@@ -1,0 +1,596 @@
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  SafeAreaView,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  StatusBar,
+} from 'react-native';
+import { Colors } from '../../theme/Theme';
+import { launchImageLibrary } from 'react-native-image-picker';
+import { uploadImage, createCircle, getHomeData } from '../../services/api';
+import { useCircleStore } from '../../store/circleStore';
+import { useAuth } from '../../context/AuthContext';
+import {
+  ArrowLeft,
+  Camera,
+  Plus,
+  GraduationCap,
+  Home,
+  Briefcase,
+  Globe,
+  Sparkles,
+  Lock,
+  PoundSterling,
+} from 'lucide-react-native';
+
+const { width } = Dimensions.get('window');
+
+const CATEGORIES = [
+  { id: '12th-grade', label: '12th Grade Friends', icon: GraduationCap },
+  { id: 'hostel-college', label: 'Hostel / College', icon: Home },
+  { id: 'work-internship', label: 'Work / Internship', icon: Briefcase },
+  { id: 'long-distance', label: 'Long Distance Friends', icon: Globe },
+  { id: 'other', label: 'Other', icon: Sparkles },
+];
+
+const OnboardCircleScreen = ({ navigation, route }: any) => {
+  const [circleName, setCircleName] = useState('');
+  const [avatar, setAvatar] = useState<any>(null);
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('hostel-college');
+  const [privacy, setPrivacy] = useState<'private' | 'public'>('private');
+
+  const { refreshProfile } = useAuth();
+  const fetchHomeData = useCircleStore(state => state.fetchHomeData);
+
+  const user = route.params?.user;
+  const maxChars = 20;
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+
+  const pickImage = async () => {
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.8,
+      includeBase64: true,
+    });
+
+    if (result.assets && result.assets[0]) {
+      const selected = result.assets[0];
+      if (!selected.uri) return;
+      setAvatar(selected);
+
+      setUploadingImage(true);
+      try {
+        const url = await uploadImage({
+          uri: selected.uri,
+          type: selected.type || 'image/jpeg',
+          name: selected.fileName || `avatar_${Date.now()}.jpg`,
+        });
+        setAvatarUrl(url);
+      } catch (err) {
+        setAvatar(null);
+        Alert.alert(
+          'Upload Error',
+          'Failed to upload image. Please try again.',
+        );
+      } finally {
+        setUploadingImage(false);
+      }
+    }
+  };
+
+  const handleCreate = async () => {
+    if (!circleName) return;
+    if (uploadingImage) {
+      Alert.alert('Uploading', 'Please wait while your photo is uploading.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Logic for selectedCategory and privacy could be sent to backend if needed
+      const res = await createCircle({
+        name: circleName,
+        avatar_url: avatarUrl,
+        reason: selectedCategory,
+        circle_type: String(privacy),
+      });
+
+      // Pre-fetch home data so the store is ready
+      await fetchHomeData(res.id);
+      // Refresh profile to update onboarding status in AuthContext
+      await refreshProfile();
+
+      navigation.navigate('Invite', {
+        user,
+        circleName: res.name,
+        inviteCode: res.invite_code,
+        id: res.id,
+        privacy: privacy,
+      });
+    } catch (error: any) {
+      console.error('Create Circle Error:', error);
+      Alert.alert('Error', error.message || 'Failed to create circle');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <ArrowLeft size={24} color="#0F172A" />
+        </TouchableOpacity>
+        <View style={styles.progressBarContainer}>
+          <View style={[styles.progressBar, { width: '40%' }]} />
+        </View>
+      </View>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <Animated.View
+            style={{
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            }}
+          >
+            {/* Title & Subtitle */}
+            <Text style={styles.title}>Create your{'\n'}circle</Text>
+            <Text style={styles.subtitle}>
+              This is your private space. Only people you invite can see what
+              happens here.
+            </Text>
+
+            {/* Circle Photo */}
+            <View style={styles.photoContainer}>
+              <TouchableOpacity
+                style={styles.photoPicker}
+                onPress={pickImage}
+                disabled={uploadingImage}
+              >
+                <View style={styles.dashedCircle}>
+                  {uploadingImage ? (
+                    <ActivityIndicator color={Colors.primary} />
+                  ) : avatar ? (
+                    <Animated.Image
+                      source={{ uri: avatar.uri }}
+                      style={styles.avatarImage}
+                    />
+                  ) : (
+                    <Camera size={24} color="#94A3B8" />
+                  )}
+                  <View style={styles.plusOverlay}>
+                    <Plus size={16} color="#FFFFFF" strokeWidth={3} />
+                  </View>
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.photoLabel}>Set Circle Photo</Text>
+            </View>
+
+            {/* Circle Name Input */}
+            <View style={styles.inputSection}>
+              <View style={styles.inputHeader}>
+                <Text style={styles.inputLabel}>CIRCLE NAME</Text>
+                <Text style={styles.inputCount}>
+                  {circleName.length}/{maxChars}
+                </Text>
+              </View>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Hostel Crew"
+                placeholderTextColor="#94A3B8"
+                value={circleName}
+                onChangeText={text => setCircleName(text.slice(0, maxChars))}
+                editable={!loading}
+              />
+              <Text style={styles.inputHint}>
+                Pick a name that feels like your group
+              </Text>
+            </View>
+
+            {/* Category Selection */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>What's this circle for?</Text>
+              {CATEGORIES.map(cat => (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={styles.categoryCard}
+                  onPress={() => setSelectedCategory(cat.id)}
+                >
+                  <View style={styles.categoryIconContainer}>
+                    <cat.icon size={20} color="#0F172A" />
+                  </View>
+                  <Text style={styles.categoryLabel}>{cat.label}</Text>
+                  <View
+                    style={[
+                      styles.radioButton,
+                      selectedCategory === cat.id && styles.radioButtonActive,
+                    ]}
+                  >
+                    {selectedCategory === cat.id && (
+                      <View style={styles.radioButtonInner} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Privacy Setting */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Privacy Setting</Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.privacyCard,
+                  privacy === 'private' && styles.privacyCardActive,
+                ]}
+                onPress={() => setPrivacy('private')}
+              >
+                <View style={styles.categoryIconContainer}>
+                  <Lock
+                    size={20}
+                    color={privacy === 'private' ? Colors.primary : '#0F172A'}
+                  />
+                </View>
+                <View style={styles.privacyInfo}>
+                  <Text style={styles.privacyLabel}>Private</Text>
+                  <Text style={styles.privacyHint}>
+                    Only members can see content
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.radioButton,
+                    privacy === 'private' && styles.radioButtonActive,
+                  ]}
+                >
+                  {privacy === 'private' && (
+                    <View style={styles.radioButtonInner} />
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.privacyCard,
+                  privacy === 'public' && styles.privacyCardActive,
+                ]}
+                onPress={() => setPrivacy('public')}
+              >
+                <View style={styles.categoryIconContainer}>
+                  <Globe
+                    size={20}
+                    color={privacy === 'public' ? Colors.primary : '#0F172A'}
+                  />
+                </View>
+                <View style={styles.privacyInfo}>
+                  <Text style={styles.privacyLabel}>Public</Text>
+                  <Text style={styles.privacyHint}>
+                    Anyone can find and join
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.radioButton,
+                    privacy === 'public' && styles.radioButtonActive,
+                  ]}
+                >
+                  {privacy === 'public' && (
+                    <View style={styles.radioButtonInner} />
+                  )}
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ height: 120 }} />
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={[
+            styles.createButton,
+            (!circleName || loading) && { opacity: 0.7 },
+          ]}
+          onPress={handleCreate}
+          disabled={!circleName || loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.createButtonText}>Create Circle</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressBarContainer: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 3,
+    marginLeft: 20,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: Colors.primary,
+    borderRadius: 3,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 20,
+  },
+  title: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#0F172A',
+    lineHeight: 52,
+    letterSpacing: -1.5,
+    marginBottom: 20,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: '#475569',
+    lineHeight: 22,
+    marginBottom: 40,
+  },
+  photoContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  photoPicker: {
+    marginBottom: 12,
+  },
+  dashedCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  plusOverlay: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  photoLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  inputSection: {
+    marginBottom: 32,
+  },
+  inputHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+    letterSpacing: 0.5,
+  },
+  inputCount: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  textInput: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    height: 56,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#0F172A',
+    fontWeight: '500',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  inputHint: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 8,
+  },
+  section: {
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 16,
+  },
+  categoryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#F1F5F9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  categoryIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  categoryLabel: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  radioButton: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioButtonActive: {
+    borderColor: Colors.primary,
+  },
+  radioButtonInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: Colors.primary,
+  },
+  privacyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#F1F5F9',
+  },
+  privacyCardActive: {
+    borderColor: Colors.primary,
+    backgroundColor: '#F5F3FF',
+  },
+  privacyInfo: {
+    flex: 1,
+  },
+  privacyLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  privacyHint: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingBottom: 40,
+  },
+  createButton: {
+    height: 56,
+    backgroundColor: Colors.primary,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  createButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});
+
+export default OnboardCircleScreen;

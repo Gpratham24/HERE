@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,192 +12,206 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  StatusBar,
 } from 'react-native';
-import { useAuthStore } from '../../store/authStore';
+import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../utils/supabase';
 import { useRealtime } from '../../hooks/useRealtime';
 import { useGlobalPresence } from '../../hooks/useGlobalPresence';
-import { CheckinButton } from '../../components/CheckinButton';
 import * as api from '../../services/api';
-import { ChevronLeft, Send, History, Info } from 'lucide-react-native';
-import { Colors, Shadows, Sizes } from '../../theme/Theme';
+import { Send, Plus } from 'lucide-react-native';
+import { Colors, Shadows } from '../../theme/Theme';
+import { AppHeader } from '../../components/AppHeader';
 
-interface Post {
+interface Message {
   id: string;
+  user_id: string;
   type: string;
   note: string;
   created_at: string;
-  users: { username: string; avatar_url: string } | null;
+  users: {
+    username: string;
+    avatar_url: string;
+    id: string;
+  } | null;
 }
 
 const CircleDetailScreen = ({ route, navigation }: any) => {
-  const { circleId, circleName } = route.params;
-  const { user } = useAuthStore();
+  const { circleId, circleName } = route?.params || {};
+  const { user } = useAuth();
   const onlineMembers = useGlobalPresence(circleId, user);
 
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // ── Fetch activity feed directly from Supabase (reads are direct) ──
-  const fetchPosts = useCallback(async () => {
+  const flatListRef = useRef<FlatList>(null);
+
+  const fetchMessages = useCallback(async () => {
     setIsLoading(true);
     const { data } = await supabase
       .from('check_ins')
-      .select('id, type, note, created_at, users(username, avatar_url)')
+      .select(
+        'id, user_id, type, note, created_at, users(id, username, avatar_url)',
+      )
       .eq('circle_id', circleId)
       .order('created_at', { ascending: false })
       .limit(50);
 
-    setPosts((data as any) || []);
+    setMessages((data as any) || []);
     setIsLoading(false);
   }, [circleId]);
 
   useEffect(() => {
-    fetchPosts();
-  }, [fetchPosts]);
+    fetchMessages();
+  }, [fetchMessages]);
 
-  // ── Real-time subscription refreshes the feed on new check-ins ──
-  useRealtime(circleId, (payload) => {
+  useRealtime(circleId, payload => {
     if (payload.eventType === 'INSERT') {
-      fetchPosts();
+      fetchMessages();
     }
   });
 
-  // ── Submit via Go Backend (handles business logic) ──
-  const handleSendCheckin = async (type: 'Done' | 'Missed' | 'Focus' | 'Rest') => {
-    if (!user || submitting) return;
+  const handleSendMessage = async () => {
+    if (!user || submitting || !inputText.trim()) return;
     setSubmitting(true);
     try {
-      await api.submitCheckin(circleId, type, inputText);
+      await api.logCheckIn(circleId, 'Focus', inputText.trim());
       setInputText('');
-      // Realtime subscription will trigger fetchPosts automatically
     } catch (err: any) {
-      Alert.alert('Check-in Failed', err.message || 'Could not submit check-in');
+      Alert.alert('Failed to send', err.message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const typeColor: Record<string, string> = {
-    Done: '#22C55E',
-    Missed: '#EF4444',
-    Focus: '#F59E0B',
-    Rest: '#6366F1',
-  };
+  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+    const isMe = item.user_id === user?.id;
+    const isStatus = item.type !== 'Focus' && !item.note;
 
-  const renderPost = ({ item }: { item: Post }) => (
-    <View style={styles.postCard}>
-      <View style={styles.postHeader}>
-        <Image
-          source={{ uri: item.users?.avatar_url || `https://ui-avatars.com/api/?name=${item.users?.username || 'U'}&background=8B5CF6&color=fff` }}
-          style={styles.postAvatar}
-        />
-        <View style={styles.postInfo}>
-          <Text style={styles.postUser}>@{item.users?.username || 'user'}</Text>
-          <Text style={styles.postTime}>
-            {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
+    if (isStatus) {
+      return (
+        <View style={styles.statusRow}>
+          <View style={styles.statusBadge}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusText}>
+              {item.users?.username} just checked in
+            </Text>
+          </View>
         </View>
-        <View style={[styles.typeBadge, { backgroundColor: (typeColor[item.type] || '#8B5CF6') + '20' }]}>
-          <Text style={[styles.typeText, { color: typeColor[item.type] || '#8B5CF6' }]}>
-            {item.type}
+      );
+    }
+
+    return (
+      <View
+        style={[
+          styles.messageWrapper,
+          isMe ? styles.myMessageWrapper : styles.theirMessageWrapper,
+        ]}
+      >
+        {!isMe && (
+          <Image
+            source={{
+              uri:
+                item.users?.avatar_url ||
+                `https://ui-avatars.com/api/?name=${item.users?.username}&background=6366F1&color=fff`,
+            }}
+            style={styles.avatar}
+          />
+        )}
+        <View style={styles.bubbleCol}>
+          {!isMe && (
+            <View style={styles.senderHeader}>
+              <Text style={styles.senderName}>{item.users?.username}</Text>
+              {item.users?.username.toLowerCase().includes('admin') && (
+                <View style={styles.roleBadge}>
+                  <Text style={styles.roleText}>CIRCLE LEAD</Text>
+                </View>
+              )}
+            </View>
+          )}
+          <View
+            style={[styles.bubble, isMe ? styles.myBubble : styles.theirBubble]}
+          >
+            <Text
+              style={[
+                styles.messageText,
+                isMe ? styles.myMessageText : styles.theirMessageText,
+              ]}
+            >
+              {item.note}
+            </Text>
+          </View>
+          <Text
+            style={[
+              styles.timeText,
+              isMe && { textAlign: 'right', marginRight: 4 },
+            ]}
+          >
+            {isMe
+              ? 'Delivered'
+              : new Date(item.created_at).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
           </Text>
         </View>
       </View>
-      {!!item.note && <Text style={styles.postNote}>{item.note}</Text>}
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerIcon}>
-          <ChevronLeft size={24} color={Colors.text} />
-        </TouchableOpacity>
-        <View style={styles.titleCol}>
-           <Text style={styles.title}>{circleName || 'Circle'}</Text>
-           <Text style={styles.onlineCount}>{onlineMembers.length} active now</Text>
-        </View>
-        <TouchableOpacity 
-          onPress={() => navigation.navigate('CircleMemory', { circleId, circleName })}
-          style={styles.headerIcon}
-        >
-          <History size={22} color={Colors.text} />
-        </TouchableOpacity>
-      </View>
+      <StatusBar barStyle="dark-content" />
+      <AppHeader
+        title={circleName}
+        showBackButton={true}
+        onBack={() => navigation.goBack()}
+        showSettings={true}
+        onSettingsPress={() => {}}
+      />
 
-      {/* Live Now row */}
-      {onlineMembers.length > 0 && (
-        <View style={styles.liveContainer}>
-          <Text style={styles.liveLabel}>LIVE NOW · {onlineMembers.length}</Text>
-          <FlatList
-            horizontal
-            data={onlineMembers}
-            keyExtractor={(m) => m.userId}
-            renderItem={({ item }) => (
-              <View style={styles.liveAvatarWrap}>
-                <Image
-                  source={{ uri: item.avatarUrl || `https://ui-avatars.com/api/?name=${item.username}&background=8B5CF6&color=fff` }}
-                  style={styles.liveAvatar}
-                />
-                <View style={styles.presenceDot} />
-              </View>
-            )}
-            contentContainerStyle={{ paddingLeft: 20 }}
-            showsHorizontalScrollIndicator={false}
-          />
-        </View>
-      )}
+      <FlatList
+        ref={flatListRef}
+        data={messages}
+        renderItem={renderMessage}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.listContent}
+        inverted
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={<View style={{ height: 20 }} />}
+      />
 
-      {/* Activity Feed */}
-      <View style={{ flex: 1 }}>
-        {isLoading ? (
-          <View style={styles.loadingBox}>
-            <ActivityIndicator color="#8B5CF6" />
-          </View>
-        ) : (
-          <FlatList
-            data={posts}
-            renderItem={renderPost}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-            inverted
-            ListEmptyComponent={
-              <View style={styles.emptyBox}>
-                <Text style={styles.emptyText}>No check-ins yet.{'\n'}Be the first! 👇</Text>
-              </View>
-            }
-          />
-        )}
-      </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.select({ ios: 0, android: 0 })}
+      >
+        <View style={styles.inputWrapper}>
+          <View style={styles.inputContainer}>
+            <TouchableOpacity style={styles.plusBtn}>
+              <Plus size={24} color={Colors.primary} />
+            </TouchableOpacity>
 
-      {/* Check-in Bar */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={90}>
-        <View style={styles.inputArea}>
-          <View style={styles.checkinRow}>
-            <CheckinButton type="Done" onPress={() => handleSendCheckin('Done')} />
-            <CheckinButton type="Missed" onPress={() => handleSendCheckin('Missed')} />
-            <CheckinButton type="Focus" onPress={() => handleSendCheckin('Focus')} />
-            <CheckinButton type="Rest" onPress={() => handleSendCheckin('Rest')} />
-          </View>
-          <View style={styles.textInputRow}>
             <TextInput
               style={styles.input}
-              placeholder="Add a context note..."
+              placeholder="Share a thought..."
+              placeholderTextColor="#94A3B8"
               value={inputText}
               onChangeText={setInputText}
-              placeholderTextColor="#94A3B8"
-              editable={!submitting}
+              multiline
             />
+
             <TouchableOpacity
-              style={[styles.sendBtn, submitting && { opacity: 0.5 }]}
-              onPress={() => handleSendCheckin('Focus')}
-              disabled={submitting}
+              style={[styles.sendBtn, !inputText.trim() && { opacity: 0.5 }]}
+              onPress={handleSendMessage}
+              disabled={submitting || !inputText.trim()}
             >
-              {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Send size={18} color="#FFFFFF" />}
+              {submitting ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Send size={20} color="#FFF" />
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -207,93 +221,100 @@ const CircleDetailScreen = ({ route, navigation }: any) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  header: {
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  listContent: { paddingHorizontal: 16, paddingBottom: 20 },
+  messageWrapper: { flexDirection: 'row', marginBottom: 24, maxWidth: '85%' },
+  myMessageWrapper: { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
+  theirMessageWrapper: { alignSelf: 'flex-start' },
+  avatar: { width: 36, height: 36, borderRadius: 18, marginTop: 4 },
+  bubbleCol: { marginLeft: 12, marginRight: 12, flexShrink: 1 },
+  senderHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    backgroundColor: '#FFFFFF',
+    marginBottom: 4,
+    marginLeft: 4,
   },
-  headerIcon: { padding: 8 },
-  titleCol: { flex: 1, alignItems: 'center' },
-  title: { fontSize: 18, fontWeight: '800', color: Colors.text },
-  onlineCount: { fontSize: 11, color: '#22C55E', fontWeight: '700', marginTop: 2 },
-  liveContainer: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    backgroundColor: '#FFFFFF',
+  senderName: { fontSize: 13, fontWeight: '700', color: '#64748B' },
+  roleBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 8,
   },
-  liveLabel: {
-    fontSize: 10,
+  roleText: {
+    color: '#B91C1C',
+    fontSize: 9,
     fontWeight: '900',
-    color: '#22C55E',
-    letterSpacing: 1,
-    marginLeft: 20,
-    marginBottom: 10,
+    letterSpacing: 0.5,
   },
-  liveAvatarWrap: { marginRight: 12, position: 'relative' },
-  liveAvatar: { width: 40, height: 40, borderRadius: 14, backgroundColor: Colors.lavender },
-  presenceDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#22C55E',
-    position: 'absolute',
-    bottom: -1,
-    right: -1,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+  bubble: { borderRadius: 20, padding: 16, ...Shadows.soft },
+  myBubble: { backgroundColor: '#4F46E5', borderTopRightRadius: 4 },
+  theirBubble: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 4 },
+  messageText: { fontSize: 16, lineHeight: 22, fontWeight: '500' },
+  myMessageText: { color: '#FFFFFF' },
+  theirMessageText: { color: '#1E293B' },
+  timeText: {
+    fontSize: 10,
+    color: '#94A3B8',
+    fontWeight: '600',
+    marginTop: 6,
+    marginLeft: 4,
   },
-  listContent: { padding: 20 },
-  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyBox: { flex: 1, alignItems: 'center', paddingTop: 60 },
-  emptyText: { fontSize: 15, color: Colors.textTertiary, textAlign: 'center', lineHeight: 22, fontWeight: '500' },
-  postCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Shadows.soft,
-  },
-  postHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  postAvatar: { width: 40, height: 40, borderRadius: 14, backgroundColor: Colors.lavender },
-  postInfo: { flex: 1, marginLeft: 12 },
-  postUser: { fontSize: 14, fontWeight: '800', color: Colors.text },
-  postTime: { fontSize: 11, color: Colors.textTertiary, fontWeight: '600', marginTop: 2 },
-  typeBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
-  typeText: { fontSize: 11, fontWeight: '800' },
-  postNote: { fontSize: 14, color: Colors.textSecondary, lineHeight: 22, fontWeight: '500' },
-  inputArea: {
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    paddingTop: 16,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    ...Shadows.premium,
-  },
-  checkinRow: { flexDirection: 'row', marginBottom: 16, gap: 8 },
-  textInputRow: {
+  statusRow: { alignItems: 'center', marginVertical: 20 },
+  statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.lavender,
+    backgroundColor: '#FFF1F2',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 20,
-    paddingRight: 6,
   },
-  input: { flex: 1, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: Colors.text, fontWeight: '500' },
-  sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: Colors.primary,
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#E11D48',
+    marginRight: 8,
+  },
+  statusText: { fontSize: 12, fontWeight: '700', color: '#9F1239' },
+  inputWrapper: {
+    padding: 16,
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  plusBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    ...Shadows.soft,
+  },
+  input: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 16,
+    color: '#1E293B',
+    maxHeight: 120,
+  },
+  sendBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#4F46E5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.medium,
   },
 });
 

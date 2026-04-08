@@ -15,7 +15,11 @@ export const useGlobalPresence = (circleId: string, currentUser: any) => {
   useEffect(() => {
     if (!circleId || !currentUser) return;
 
-    const channel = supabase.channel(`presence:${circleId}`, {
+    // Remove existing channel with the same name to avoid "after subscribe" errors
+    const channelName = `presence-${circleId}`;
+    supabase.removeChannel(supabase.channel(channelName));
+
+    const channel = supabase.channel(channelName, {
       config: {
         presence: {
           key: currentUser.id,
@@ -27,41 +31,37 @@ export const useGlobalPresence = (circleId: string, currentUser: any) => {
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
         const members: PresenceUser[] = [];
-        
+
         for (const id in state) {
           const presenceInfo = state[id][0] as any;
-          members.push({
-            userId: id,
-            username: presenceInfo.username || 'User',
-            avatarUrl: presenceInfo.avatarUrl || '',
-            status: presenceInfo.status || 'free',
-            lastSeen: new Date().toISOString(),
-          });
+          if (presenceInfo) {
+            members.push({
+              userId: id,
+              username: presenceInfo.username || 'User',
+              avatarUrl: presenceInfo.avatarUrl || '',
+              status: presenceInfo.status || 'free',
+              lastSeen: new Date().toISOString(),
+            });
+          }
         }
         setOnlineMembers(members);
       })
-      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        console.log('User joined:', key, newPresences);
-      })
-      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-        console.log('User left:', key, leftPresences);
-      })
-      .subscribe(async (status) => {
+      .subscribe(async status => {
         if (status === 'SUBSCRIBED') {
           await channel.track({
             userId: currentUser.id,
             username: currentUser.user_metadata?.username || currentUser.email,
             avatarUrl: currentUser.user_metadata?.avatar_url || '',
-            status: 'online', // This can be updated dynamiclly
+            status: 'online',
             onlineAt: new Date().toISOString(),
           });
         }
       });
 
     return () => {
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
-  }, [circleId, currentUser]);
+  }, [circleId, currentUser.id]); // Narrowly track only the user ID to prevent re-runs
 
   return onlineMembers;
 };

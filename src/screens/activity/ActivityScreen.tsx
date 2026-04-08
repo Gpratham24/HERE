@@ -11,7 +11,7 @@ import {
   StatusBar
 } from 'react-native';
 import { Colors, Shadows, Sizes } from '../../theme/Theme';
-import { Sparkles, Plus, ChevronRight, Zap, Target, Coffee, Moon, Ghost } from 'lucide-react-native';
+import { Sparkles, Plus, ChevronRight, Zap, Target, Coffee, User, Activity } from 'lucide-react-native';
 import { CheckInModal } from '../../components/CheckInModal'; 
 
 const { width } = Dimensions.get('window');

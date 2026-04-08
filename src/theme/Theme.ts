@@ -1,7 +1,7 @@
 export const Colors = {
   background: '#FFFFFF', // Pure white core
-  softBg: '#F8F7FF', // Deeper lavender-tinted background 
-  surface: '#FFFFFF', 
+  softBg: '#F8F7FF', // Deeper lavender-tinted background
+  surface: '#FFFFFF',
   primary: '#5B4FE1', // More vibrant, slightly deeper primary
   primaryLight: '#EEEDFF', // Active highlights
   accent: '#7C3AED', // Royal Purple accent
@@ -49,5 +49,12 @@ export const Shadows = {
     shadowOpacity: 0.05,
     shadowRadius: 40,
     elevation: 15,
-  }
+  },
+  dark: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 8,
+  },
 };

@@ -1,37 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  SafeAreaView, 
-  KeyboardAvoidingView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Alert,
   ScrollView,
-  Animated
+  Animated,
 } from 'react-native';
-import { useAuthStore } from '../../store/authStore';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
-import { Colors, Shadows, Sizes } from '../../theme/Theme';
-import { Lock, UserPlus } from 'lucide-react-native';
+import { Colors, Shadows } from '../../theme/Theme';
+import { Lock } from 'lucide-react-native';
+import * as api from '../../services/api';
+import { setSessionToken } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const SignupScreen = ({ navigation }: any) => {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  const setUser = useAuthStore((state) => state.setUser);
-  
+
+  const { setBiometricUnlocked } = useAuth();
+
   // Handover Animations
   const contentFadeAnim = useRef(new Animated.Value(0)).current;
   const contentMoveAnim = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
-    // Graceful fade-up for content
     Animated.parallel([
       Animated.timing(contentFadeAnim, {
         toValue: 1,
@@ -42,61 +43,98 @@ const SignupScreen = ({ navigation }: any) => {
         toValue: 0,
         friction: 8,
         useNativeDriver: true,
-      })
+      }),
     ]).start();
   }, [contentFadeAnim, contentMoveAnim]);
 
   const handleSignup = async () => {
-    if (!email || !password || !username) {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanEmail || !cleanPassword || !cleanUsername) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { username: username } }
-    });
 
-    if (error) {
-      Alert.alert('Signup Failed', error.message);
+    try {
+      const data = await api.signup(cleanEmail, cleanPassword, cleanUsername);
+
+      if (data) {
+        if (data.access_token || data.session) {
+          const access_token = data.access_token || data.session?.access_token;
+          const refresh_token = data.refresh_token || data.session?.refresh_token;
+
+          if (access_token) {
+            setSessionToken(access_token);
+            await supabase.auth.setSession({
+              access_token,
+              refresh_token: refresh_token || '',
+            });
+            setBiometricUnlocked(true);
+          }
+        } else {
+          Alert.alert(
+            'Verify Your Account',
+            `Verify your account and login with your credentials. We've sent a confirmation link to ${cleanEmail}.`,
+            [
+              {
+                text: 'Got it',
+                onPress: () => navigation.navigate('Login', { email: cleanEmail }),
+              },
+            ],
+          );
+        }
+      }
+    } catch (err: any) {
+      const msg = err.message || '';
+      if (msg.includes('EMAIL_ALREADY_EXISTS') || msg.toLowerCase().includes('already registered')) {
+        Alert.alert(
+          'Account Exists',
+          `${cleanEmail} already exist. Please log in with your credentials.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Log In',
+              onPress: () => navigation.navigate('Login', { email: cleanEmail }),
+            },
+          ],
+        );
+      } else {
+        Alert.alert('Signup Problem', err.message);
+      }
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (data.user) {
-      await supabase.from('users').insert({
-        id: data.user.id,
-        username: username,
-        email: email,
-      });
-      // Instead of entering the app immediately, move to the guided onboarding
-      navigation.navigate('Intro', { user: data.user });
-    }
-    setLoading(false);
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.header}>
             <Text style={styles.logo}>HERE</Text>
             <View style={styles.line} />
             <Text style={styles.tagline}>Private Social for Real Circles</Text>
           </View>
 
-          <Animated.View style={[
-            styles.form,
-            { 
-              opacity: contentFadeAnim, 
-              transform: [{ translateY: contentMoveAnim }] 
-            }
-          ]}>
+          <Animated.View
+            style={[
+              styles.form,
+              {
+                opacity: contentFadeAnim,
+                transform: [{ translateY: contentMoveAnim }],
+              },
+            ]}
+          >
             <TextInput
               style={styles.input}
               placeholder="Username"
@@ -123,7 +161,7 @@ const SignupScreen = ({ navigation }: any) => {
               placeholderTextColor="#94A3B8"
             />
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.signupBtn}
               onPress={handleSignup}
               disabled={loading}
@@ -136,23 +174,28 @@ const SignupScreen = ({ navigation }: any) => {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => navigation.navigate('Login')}
               style={styles.loginLink}
             >
               <Text style={styles.loginLinkText}>
-                Have an account? <Text style={{ color: Colors.primary, fontWeight: '700' }}>Log In</Text>
+                Have an account?{' '}
+                <Text style={{ color: Colors.primary, fontWeight: '700' }}>
+                  Log In
+                </Text>
               </Text>
             </TouchableOpacity>
           </Animated.View>
 
-          <Animated.View style={[
-            styles.footer,
-            { 
-              opacity: contentFadeAnim, 
-              transform: [{ translateY: contentMoveAnim }] 
-            }
-          ]}>
+          <Animated.View
+            style={[
+              styles.footer,
+              {
+                opacity: contentFadeAnim,
+                transform: [{ translateY: contentMoveAnim }],
+              },
+            ]}
+          >
             <View style={styles.footerDivider} />
             <View style={styles.securityRow}>
               <Lock size={12} color="#94A3B8" />

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Colors } from '../theme/Theme';
-import { Clock, User } from 'lucide-react-native';
+import { Clock, User, Flame } from 'lucide-react-native';
 
 interface CircleCardProps {
   name: string;
@@ -9,10 +9,19 @@ interface CircleCardProps {
   lastActivity: string;
   avatarUrl?: string;
   presenceCount?: number;
+  streak?: number;
   onPress: () => void;
 }
 
-export const CircleCard = ({ name, memberCount, lastActivity, avatarUrl, presenceCount = 0, onPress }: CircleCardProps) => {
+export const CircleCard = ({ 
+  name, 
+  memberCount, 
+  lastActivity, 
+  avatarUrl, 
+  presenceCount = 0, 
+  streak = 0,
+  onPress 
+}: CircleCardProps) => {
   return (
     <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={onPress}>
       <View style={styles.topRow}>
@@ -30,12 +39,21 @@ export const CircleCard = ({ name, memberCount, lastActivity, avatarUrl, presenc
             <Text style={styles.memberCount}>{memberCount} members</Text>
           </View>
         </View>
-        {presenceCount > 0 && (
-          <View style={styles.presenceBadge}>
-            <View style={styles.greenDot} />
-            <Text style={styles.presenceText}>{presenceCount} Active</Text>
-          </View>
-        )}
+        
+        <View style={styles.rightActions}>
+          {streak > 0 && (
+            <View style={styles.streakPill}>
+              <Flame size={12} color="#FF9F0A" fill="#FF9F0A" />
+              <Text style={styles.streakText}>{streak} day</Text>
+            </View>
+          )}
+          {presenceCount > 0 && (
+            <View style={styles.presenceBadge}>
+              <View style={styles.greenDot} />
+              <Text style={styles.presenceText}>{presenceCount} Active</Text>
+            </View>
+          )}
+        </View>
       </View>
       <View style={styles.divider} />
       <View style={styles.footer}>
@@ -99,23 +117,41 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
+  rightActions: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  streakPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF7ED', // Soft orange/warm background
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  streakText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#D97706',
+    marginLeft: 4,
+  },
   presenceBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ECFDF5', // Soft green tint
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
+    backgroundColor: '#ECFDF5', 
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
   greenDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#10B981',
-    marginRight: 6,
+    marginRight: 4,
   },
   presenceText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#047857',
   },
@@ -129,10 +165,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   activityText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#9CA3AF',
     marginLeft: 6,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },

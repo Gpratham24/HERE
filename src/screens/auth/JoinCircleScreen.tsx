@@ -1,24 +1,68 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  SafeAreaView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  SafeAreaView,
   Animated,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Colors, Shadows, Sizes } from '../../theme/Theme';
+import { getCircleByCode, joinCircle } from '../../services/api';
+import { useCircleStore } from '../../store/circleStore';
+import { useAuth } from '../../context/AuthContext';
 
 const JoinCircleScreen = ({ navigation, route }: any) => {
   const [inviteCode, setInviteCode] = useState('');
+  const [loading, setLoading] = useState(false);
   const user = route.params?.user;
-  
+  const fetchHomeData = useCircleStore(state => state.fetchHomeData);
+  const { refreshProfile } = useAuth();
+
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   const slideAnim = React.useRef(new Animated.Value(20)).current;
+
+  const handleJoin = async () => {
+    if (!inviteCode) return;
+
+    setLoading(true);
+    try {
+      // 1. Resolve code to circle ID via Supabase
+      const circle = await getCircleByCode(inviteCode);
+
+      if (!circle) {
+        throw new Error('Invalid invite code. Please check and try again.');
+      }
+
+      // 2. Call backend to join the circle
+      // 3. Trigger instant data refresh
+      await fetchHomeData(circle.id);
+      await refreshProfile();
+
+      // 4. Navigate to success/invite screen
+      navigation.navigate('Invite', {
+        user,
+        circleName: circle.name,
+        inviteCode: inviteCode.toUpperCase(),
+        id: circle.id,
+        mode: 'joining',
+      });
+    } catch (error: any) {
+      console.error('Join Circle Error:', error);
+      Alert.alert(
+        'Join Failed',
+        error.message || "We couldn't find a circle with that code.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   React.useEffect(() => {
     Animated.parallel([
@@ -31,32 +75,39 @@ const JoinCircleScreen = ({ navigation, route }: any) => {
         toValue: 0,
         friction: 8,
         useNativeDriver: true,
-      })
+      }),
     ]).start();
   }, [fadeAnim, slideAnim]);
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.header}>
             <Text style={styles.logo}>HERE</Text>
             <View style={styles.line} />
             <Text style={styles.tagline}>Private Social for Real Circles</Text>
           </View>
 
-          <Animated.View style={[
-            styles.content,
-            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
-          ]}>
+          <Animated.View
+            style={[
+              styles.content,
+              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+            ]}
+          >
             <View style={styles.textBlock}>
               <Text style={styles.headline}>Join a Circle.</Text>
-              <Text style={styles.subtext}>Enter the 6-digit invite code or link sent by your friend.</Text>
+              <Text style={styles.subtext}>
+                Enter the 6-digit invite code or link sent by your friend.
+              </Text>
             </View>
-            
+
             <View style={styles.formContainer}>
               <TextInput
                 style={styles.input}
@@ -66,24 +117,30 @@ const JoinCircleScreen = ({ navigation, route }: any) => {
                 autoCapitalize="characters"
                 maxLength={10}
                 placeholderTextColor="#94A3B8"
+                editable={!loading}
               />
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
                   styles.button,
-                  !inviteCode && { opacity: 0.5 }
+                  (!inviteCode || loading) && { opacity: 0.5 },
                 ]}
                 activeOpacity={0.9}
-                disabled={!inviteCode}
-                onPress={() => navigation.navigate('Invite', { user, inviteCode, mode: 'joining' })}
+                disabled={!inviteCode || loading}
+                onPress={handleJoin}
               >
-                <Text style={styles.buttonText}>Join Circle</Text>
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.buttonText}>Join Circle</Text>
+                )}
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.linkAction}
                 activeOpacity={0.7}
                 onPress={() => {}} // Could trigger clipboard check
+                disabled={loading}
               >
                 <Text style={styles.linkActionText}>Paste invite link</Text>
               </TouchableOpacity>
@@ -184,7 +241,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#8B5CF6',
     fontWeight: '700',
-  }
+  },
 });
 
 export default JoinCircleScreen;

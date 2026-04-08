@@ -1,73 +1,132 @@
 import { create } from 'zustand';
-import { supabase } from '../utils/supabase';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '@supabase/supabase-js';
+import { supabase } from '../utils/supabase';
+import { setSessionToken, getUserProfile } from '../services/api';
 
 interface AuthState {
   user: User | null;
   userData: any | null;
   isLoading: boolean;
   isLoadingUserData: boolean;
-  
+
   setUser: (user: User | null) => void;
   setUserData: (data: any) => void;
   setLoading: (loading: boolean) => void;
   setLoadingUserData: (loading: boolean) => void;
-  
+
   initialize: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
-  user: null,
-  userData: null,
-  isLoading: true,
-  isLoadingUserData: true,
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      userData: null,
+      isLoading: true,
+      isLoadingUserData: true,
 
-  setUser: (user) => set({ user }),
-  setUserData: (userData) => set({ userData }),
-  setLoading: (isLoading) => set({ isLoading }),
-  setLoadingUserData: (isLoadingUserData) => set({ isLoadingUserData }),
+      setUser: user => set({ user }),
+      setUserData: userData => set({ userData }),
+      setLoading: isLoading => set({ isLoading }),
+      setLoadingUserData: isLoadingUserData => set({ isLoadingUserData }),
 
-  initialize: async () => {
-    // Check session
-    const { data: { session } } = await supabase.auth.getSession();
-    const user = session?.user ?? null;
-    set({ user, isLoading: false });
+      initialize: async () => {
+        if (!supabase) {
+          set({ isLoading: false });
+          return;
+        }
 
-    if (user) {
-      get().setLoadingUserData(true);
-      const { data } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      
-      set({ userData: data, isLoadingUserData: false });
-    } else {
-      set({ isLoadingUserData: false });
-    }
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          if (session) {
+            setSessionToken(session.access_token);
+            set({ user: session.user });
+          }
 
-    // Listen to changes
-    supabase.auth.onAuthStateChange(async (event, session) => {
-      const newUser = session?.user ?? null;
-      set({ user: newUser });
-      
-      if (newUser) {
+          // Fetch fresh profile in background even if we have it in storage
+          if (session?.user) {
+            try {
+              const profileData = await getUserProfile();
+              set({ userData: profileData });
+            } catch (err) {
+              console.warn(
+                '⚠️ BG Profile Sync failed. Using cached data if available.',
+              );
+              // If no profile data exists at all (not even in cache), logout as before
+              if (!get().userData) {
+                await supabase.auth.signOut();
+                set({ user: null, userData: null });
+              }
+            } finally {
+              set({ isLoadingUserData: false, isLoading: false });
+            }
+          } else {
+            set({
+              user: null,
+              userData: null,
+              isLoadingUserData: false,
+              isLoading: false,
+            });
+          }
+        } catch (err: any) {
+          set({
+            user: null,
+            userData: null,
+            isLoadingUserData: false,
+            isLoading: false,
+          });
+        }
+
+        // Listen for changes
+        supabase.auth.onAuthStateChange(async (event, session) => {
+          const newUser = session?.user ?? null;
+          set({ user: newUser });
+          setSessionToken(session?.access_token ?? null);
+
+          if (newUser) {
+            try {
+              const profileData = await getUserProfile();
+              set({ userData: profileData });
+            } catch (err) {
+              set({ userData: null });
+            }
+          } else {
+            set({ userData: null });
+          }
+        });
+      },
+
+      refreshProfile: async () => {
+        const { user } = get();
+        if (!user) return;
         set({ isLoadingUserData: true });
-        const { data } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', newUser.id)
-          .single();
-        set({ userData: data, isLoadingUserData: false });
-      } else {
-        set({ userData: null, isLoadingUserData: false });
-      }
-    });
-  },
+        try {
+          const profileData = await getUserProfile();
+          set({ userData: profileData });
+        } finally {
+          set({ isLoadingUserData: false });
+        }
+      },
 
-  signOut: async () => {
-    await supabase.auth.signOut();
-    set({ user: null, userData: null });
-  }
-}));
+      signOut: async () => {
+        await supabase.auth.signOut();
+        set({ user: null, userData: null });
+      },
+    }),
+    {
+      name: 'auth-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      // Don't persist loading states
+      partialize: state => ({
+        user: state.user,
+        userData: state.userData,
+      }),
+    },
+  ),
+);
