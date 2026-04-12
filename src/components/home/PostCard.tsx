@@ -287,7 +287,7 @@ export default function PostCard({
             <Text style={{ fontSize: 13, fontWeight: '800', color: '#111111' }}>
               {item.communityNames && item.communityNames.length > 1
                 ? item.communityNames.map((c: string) => `c/${c}`).join(', ')
-                : `c/${item.communityName || 'HERE'}`} • {formatTime(item.createdAt)}
+                : `c/${item.communityName || 'Circlo'}`} • {formatTime(item.createdAt)}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={{ padding: 4 }} onPress={() => setShowOptions(!showOptions)}>

@@ -22,7 +22,7 @@ export default function Header({ onNotificationPress, onProfilePress }: HeaderPr
             <View style={styles.bubble2} />
             <View style={styles.bubble3} />
          </View>
-         <Text style={styles.logoText}>HERE</Text>
+         <Text style={styles.logoText}>Circlo</Text>
       </View>
 
       <View style={styles.actionContainer}>

@@ -48,6 +48,13 @@ export const useGlobalPresence = (circleId: string, currentUser: any) => {
       })
       .subscribe(async status => {
         if (status === 'SUBSCRIBED') {
+          // Update persistent status table
+          await supabase.from('user_status').upsert({
+            user_id: currentUser.id,
+            is_online: true,
+            last_seen: new Date().toISOString(),
+          });
+
           await channel.track({
             userId: currentUser.id,
             username: currentUser.user_metadata?.username || currentUser.email,

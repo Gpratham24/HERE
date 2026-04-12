@@ -2,7 +2,8 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../utils/supabase';
 
-const BACKEND_URL = 'https://here-backend-t6qt.onrender.com';
+const BACKEND_URL = 'https://backend-circlo.onrender.com';
+// const BACKEND_URL = 'http://10.226.253.170:8080';
 
 // ─── Token Memory Cache ───────────────────────────────────────────────────────
 let activeToken: string | null = null;
@@ -105,6 +106,8 @@ async function request<T>(
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), 30000);
 
+  console.log(`[API] 🚀 ${method} ${url}`);
+
   try {
     const response = await fetch(url, {
       ...options,
@@ -122,6 +125,7 @@ async function request<T>(
     }
 
     if (!response.ok) {
+      console.warn(`[API] ❌ ${method} ${url} Status: ${response.status}`);
       throw new Error(data.error || data.msg || data.message || 'Something went wrong');
     }
 
@@ -132,6 +136,11 @@ async function request<T>(
     return data as T;
   } catch (error: any) {
     clearTimeout(id);
+    if (error.name === 'AbortError') {
+      console.error(`[API] 🛑 ${method} ${url} - Request timed out or was aborted (30s)`);
+      throw new Error(`Connection to ${url} timed out. Make sure your backend is running.`);
+    }
+    console.error(`[API] 💥 ${method} ${url} - Error:`, error.message);
     throw error;
   }
 }
@@ -195,29 +204,67 @@ export const uploadUserAvatar = async (file: { uri: string; type: string; name: 
 };
 
 export const createCircle = (params: any) => apiPost<any>('/api/v1/circles', params);
-export const getCircles = () => apiGet<any[]>('/api/v1/circles');
+export const getCircles = (skipCache: boolean = false) => apiGet<any[]>('/api/v1/circles', skipCache);
+export const getPublicCircles = (location: string = '') => apiGet<any[]>(`/api/v1/circles/public?location=${location}`, true); // Always skip cache for discovery
 export const getCircleByCode = async (inviteCode: string) => {
-  const { data, error } = await supabase
-    .from('circles')
-    .select('id, name')
-    .eq('invite_code', inviteCode.toUpperCase())
-    .single();
-  if (error) throw error;
-  return data;
+  return apiGet<{ id: string; name: string }>(`/api/v1/circles/resolve-code?code=${encodeURIComponent(inviteCode)}`);
 };
 export const joinCircle = (circleId: string) => apiPost<any>(`/api/v1/circles/${circleId}/join`, {});
+export const leaveCircle = (circleId: string) =>
+  request<any>(`/api/v1/circles/${circleId}/leave`, { method: 'DELETE' });
+export const removeCircleMember = (circleId: string, userId: string) =>
+  request<any>(`/api/v1/circles/${circleId}/members/${userId}`, { method: 'DELETE' });
 export const getUserCircles = () => apiGet<any[]>('/api/v1/circles');
 export const logCheckIn = (circleId: string, type: string, note: string = '') =>
   apiPost<any>('/api/v1/checkins', { circle_id: circleId, type, note });
 
-export const getHomeData = (circleId?: string) => {
-  const url = circleId ? `/api/v1/home-data?circle_id=${circleId}` : '/api/v1/home-data';
-  return apiGet<any>(url);
+export const getCircleData = (circleId?: string, skipCache: boolean = false) => {
+  const url = circleId ? `/api/v1/circle-data?circle_id=${circleId}` : '/api/v1/circle-data';
+  return apiGet<any>(url, skipCache);
+};
+
+export const getCirclePosts = (circleId: string) => {
+  return apiGet<any[]>(`/api/v1/home-post?circle_id=${circleId}`, true); // skip cache for refresh
 };
 
 export const updatePresence = (status: string) => apiPost<any>('/api/v1/presence', { status });
 export const addReaction = (postId: string, emoji: string) => apiPost<any>(`/api/v1/posts/${postId}/react`, { emoji });
 export const createPost = (params: any) => apiPost<any>('/api/v1/posts', params);
-export const getUserProfile = () => apiGet<any>('/api/v1/user/profile');
+export const deletePost = (postId: string, circleId: string) =>
+  request<any>(`/api/v1/posts/${postId}?circle_id=${circleId}`, { method: 'DELETE' });
+
+export const getUserProfile = (skipCache: boolean = false) => apiGet<any>('/api/v1/user/profile', skipCache);
+export const updateUserProfile = (params: { username?: string; phone_number?: string; avatar_url?: string; onboarding_done?: boolean }) =>
+  apiPost<any>('/api/v1/user/profile', params);
+export const updatePushToken = (token: string) =>
+  apiPost<any>('/api/v1/user/push-token', { token });
 export const deleteAccount = () => request<any>('/api/v1/user/account', { method: 'DELETE' });
 export const checkBackendHealth = () => apiGet<any>('/health');
+
+// Modular Domain Endpoints
+export const getSubscriptionStatus = () => apiGet<any>('/api/v1/subscription/status');
+
+export const createInvitation = (circleId: string) =>
+  apiPost<{ invite_token: string; link: string }>('/api/v1/invitations/create', { circle_id: circleId });
+
+export const joinInvitation = (token: string) =>
+  apiPost<any>(`/api/v1/invitations/join/${token}`, {});
+
+export const getMarketplaceProducts = (circleId?: string) => {
+  const url = circleId ? `/api/v1/marketplace/products?circle_id=${circleId}` : '/api/v1/marketplace/products';
+  return apiGet<any[]>(url);
+};
+
+// Admin Approval Endpoints
+export const getPendingMembers = (circleId: string) =>
+  apiGet<any[]>(`/api/v1/circles/${circleId}/pending`, true);
+
+export const approveJoinRequest = (circleId: string, userId: string) =>
+  apiPost<any>(`/api/v1/circles/${circleId}/approve/${userId}`, {});
+
+export const rejectJoinRequest = (circleId: string, userId: string) =>
+  apiPost<any>(`/api/v1/circles/${circleId}/reject/${userId}`, {});
+
+// Notification Endpoints
+export const getNotifications = () => apiGet<any[]>('/api/v1/notifications', true);
+export const markNotificationRead = (id: string) => apiPost<any>(`/api/v1/notifications/${id}/read`, {});

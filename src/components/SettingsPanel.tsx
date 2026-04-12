@@ -7,11 +7,17 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
-  SafeAreaView,
   ScrollView,
+  Switch,
 } from 'react-native';
-import { X, ChevronRight, User, Shield, Bell, HelpCircle, Info, LogOut } from 'lucide-react-native';
+import { X, ChevronRight, User, Shield, Bell, HelpCircle, Info, LogOut, Fingerprint } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Shadows } from '../theme/Theme';
+import { useSettingsStore } from '../store/settingsStore';
+import { AccountEditPanel } from './AccountEditPanel';
+import { AboutCircloPanel } from './AboutCircloPanel';
+import { PrivacyPolicyPanel } from './PrivacyPolicyPanel';
+import { HelpCenterPanel } from './HelpCenterPanel';
 
 interface SettingsPanelProps {
   visible: boolean;
@@ -19,7 +25,7 @@ interface SettingsPanelProps {
   onLogout: () => void;
 }
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   visible,
@@ -27,6 +33,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onLogout,
 }) => {
   const slideAnim = useRef(new Animated.Value(width)).current;
+  const { biometricsEnabled, setBiometricsEnabled } = useSettingsStore();
+  const [showAccountEdit, setShowAccountEdit] = React.useState(false);
+  const [showAbout, setShowAbout] = React.useState(false);
+  const [showPrivacy, setShowPrivacy] = React.useState(false);
+  const [showHelp, setShowHelp] = React.useState(false);
+
+  // Check if any sub-panel is currently open
+  const isSubPanelOpen = showAccountEdit || showAbout || showPrivacy || showHelp;
 
   useEffect(() => {
     if (visible) {
@@ -39,12 +53,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     } else {
       slideAnim.setValue(width);
     }
-  }, [visible]);
+  }, [visible, slideAnim]);
 
-  if (!visible) return null;
-
-  const renderItem = (icon: any, title: string, color: string) => (
-    <TouchableOpacity style={styles.item} activeOpacity={0.7}>
+  const renderItem = (icon: any, title: string, color: string, onPress?: () => void) => (
+    <TouchableOpacity
+      style={styles.item}
+      activeOpacity={0.7}
+      onPress={onPress}
+    >
       <View style={[styles.iconBox, { backgroundColor: color + '15' }]}>
         {icon}
       </View>
@@ -54,15 +70,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   );
 
   return (
-    <Modal transparent visible={visible} animationType="none">
-      <View style={styles.overlay}>
-        <Animated.View 
+    <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
+      <View style={styles.root}>
+        {/* Settings Panel Content */}
+        <Animated.View
+          pointerEvents={isSubPanelOpen ? 'none' : 'auto'}
           style={[
             styles.panel,
             { transform: [{ translateX: slideAnim }] }
           ]}
         >
-          <SafeAreaView style={styles.safeArea}>
+          <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
             <View style={styles.header}>
               <Text style={styles.headerTitle}>Settings</Text>
               <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
@@ -70,36 +88,78 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView 
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.scrollContent} 
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
+            >
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>PREFERENCES</Text>
-                {renderItem(<User size={20} color="#4F46E5" />, "Account Info", "#4F46E5")}
-                {renderItem(<Shield size={20} color="#10B981" />, "Privacy", "#10B981")}
+                {renderItem(<User size={20} color="#4F46E5" />, "Account Info", "#4F46E5", () => setShowAccountEdit(true))}
                 {renderItem(<Bell size={20} color="#F59E0B" />, "Notifications", "#F59E0B")}
               </View>
 
               <View style={styles.section}>
+                <Text style={styles.sectionLabel}>SECURITY</Text>
+                <View style={styles.item}>
+                  <View style={[styles.iconBox, { backgroundColor: '#10B98115' }]}>
+                    <Fingerprint size={20} color="#10B981" />
+                  </View>
+                  <Text style={styles.itemText}>Biometric Lock</Text>
+                  <Switch
+                    value={biometricsEnabled}
+                    onValueChange={setBiometricsEnabled}
+                    trackColor={{ false: '#CBD5E1', true: '#818CF8' }}
+                    thumbColor={biometricsEnabled ? '#4F46E5' : '#F8FAFC'}
+                  />
+                </View>
+                {renderItem(<Shield size={20} color="#6366F1" />, "Privacy Policy", "#6366F1", () => setShowPrivacy(true))}
+              </View>
+
+              <View style={styles.section}>
                 <Text style={styles.sectionLabel}>SUPPORT</Text>
-                {renderItem(<HelpCircle size={20} color="#8B5CF6" />, "Help Center", "#8B5CF6")}
-                {renderItem(<Info size={20} color="#64748B" />, "About HERE", "#64748B")}
+                {renderItem(<HelpCircle size={20} color="#8B5CF6" />, "Help Center", "#8B5CF6", () => setShowHelp(true))}
+                {renderItem(<Info size={20} color="#64748B" />, "About Circlo", "#64748B", () => setShowAbout(true))}
               </View>
 
               <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
                 <LogOut size={20} color="#EF4444" />
-                <Text style={styles.logoutText}>Sign Out of HERE</Text>
+                <Text style={styles.logoutText}>Sign Out of Circlo</Text>
               </TouchableOpacity>
 
               <Text style={styles.versionText}>Version 1.0.4 (Build 42)</Text>
             </ScrollView>
           </SafeAreaView>
         </Animated.View>
+
+        {/* Sub-Panels as top-level children of the Modal */}
+        <AccountEditPanel
+          visible={showAccountEdit}
+          onClose={() => setShowAccountEdit(false)}
+        />
+
+        <AboutCircloPanel
+          visible={showAbout}
+          onClose={() => setShowAbout(false)}
+        />
+
+        <PrivacyPolicyPanel
+          visible={showPrivacy}
+          onClose={() => setShowPrivacy(false)}
+        />
+
+        <HelpCenterPanel
+          visible={showHelp}
+          onClose={() => setShowHelp(false)}
+        />
       </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
+  root: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
@@ -107,6 +167,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'white',
     width: width,
+    height: height,
     ...Shadows.dark,
   },
   safeArea: {
@@ -132,6 +193,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 24,
+    flexGrow: 1,
   },
   section: {
     marginBottom: 32,

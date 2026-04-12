@@ -3,7 +3,8 @@ import { supabase } from '../utils/supabase';
 import { useCircleStore } from '../store/circleStore';
 
 // Note: Use ws:// for local development. Handle Android Emulator 10.0.2.2 mapping.
-const WS_URL = 'wss://here-backend-t6qt.onrender.com/api/v1/presence/ws';
+const WS_URL = 'wss://backend-circlo.onrender.com/api/v1/presence/ws';
+// const WS_URL = 'ws://127.0.0.1:8080/api/v1/presence/ws';
 
 class WebSocketService {
   private socket: WebSocket | null = null;
@@ -34,6 +35,7 @@ class WebSocketService {
     // Pass the bearer token in the protocol or a query param if header is not supported by standard WebSocket browser API (some RN environments do support headers)
     // Here we'll rely on the backend expecting the token, typically in the initial upgrade request.
     // Standard react-native WebSocket supports headers.
+    console.log(`📡 WebSocket connecting to: ${WS_URL}`);
     this.socket = new WebSocket(WS_URL, undefined, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -59,11 +61,11 @@ class WebSocketService {
     };
 
     this.socket.onerror = e => {
-      console.error('❌ WebSocket Error:', e);
+      console.error('❌ WebSocket Error Details:', JSON.stringify(e));
     };
 
     this.socket.onclose = e => {
-      console.log('🔴 WebSocket Closed:', e.reason);
+      console.log(`🔴 WebSocket Closed: [Code: ${e.code}] Reason: ${e.reason || 'No reason provided'}`);
       this.socket = null;
       this.scheduleReconnect();
     };

@@ -15,30 +15,61 @@ import {
   MoreHorizontal,
   Smile,
   Send,
+  Trash2,
 } from 'lucide-react-native';
+import { useAuth } from '../context/AuthContext';
+import { useCircleStore } from '../store/circleStore';
+import { Alert } from 'react-native';
 
 interface PostCardProps {
   post: Post;
   authorName: string;
   authorAvatar?: string;
   onReact: (postId: string, emoji: string) => void;
+  onComment?: (postId: string) => void;
 }
 
-export const PostCard: React.FC<PostCardProps> = ({
+export const PostCard: React.FC<PostCardProps> = React.memo(({
   post,
   authorName,
   authorAvatar,
   onReact,
+  onComment,
 }) => {
+  const { userData } = useAuth();
+  const deletePost = useCircleStore(state => state.deletePost);
+  const isOwner = userData?.id === post.user_id;
+
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `${authorName} shared a moment on HERE: ${post.caption || ''}`,
+        message: `${authorName} shared a moment on Circlo: ${post.caption || ''}`,
         url: post.content_url,
       });
     } catch (error) {
       console.error('Error sharing post:', error);
     }
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deletePost(post.id);
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to delete post');
+            }
+          }
+        },
+      ]
+    );
   };
 
   const reactionEmojis = ['❤️', '🔥', '👍', '😂', '👀'];
@@ -66,9 +97,12 @@ export const PostCard: React.FC<PostCardProps> = ({
             </Text>
           </View>
         </View>
-        <TouchableOpacity>
-          <MoreHorizontal size={20} color={Colors.textTertiary} />
-        </TouchableOpacity>
+        
+        {isOwner && (
+          <TouchableOpacity onPress={handleDelete}>
+            <MoreHorizontal size={20} color={Colors.textTertiary} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.contentContainer}>
@@ -115,6 +149,13 @@ export const PostCard: React.FC<PostCardProps> = ({
                 </TouchableOpacity>
               );
             })}
+
+            <TouchableOpacity 
+              style={styles.commentButton}
+              onPress={() => onComment && onComment(post.id)}
+            >
+              <MessageCircle size={20} color={Colors.textSecondary} />
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity onPress={handleShare} style={styles.shareIcon}>
@@ -124,7 +165,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -135,7 +176,7 @@ const styles = StyleSheet.create({
     ...Shadows.soft,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: Colors.border,
   },
   header: {
     flexDirection: 'row',
@@ -182,7 +223,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     width: '100%',
     aspectRatio: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: Colors.softBg,
   },
   postImage: {
     width: '100%',
@@ -220,7 +261,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#F8FAFC',
+    borderTopColor: Colors.softBg,
   },
   reactionsRow: {
     flexDirection: 'row',
@@ -229,14 +270,14 @@ const styles = StyleSheet.create({
   reactionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: Colors.border,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     marginRight: 8,
   },
   activeReaction: {
-    backgroundColor: '#EEEDFF',
+    backgroundColor: Colors.primaryLight,
     borderColor: '#C7D2FE',
     borderWidth: 0.5,
   },
@@ -248,6 +289,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.primary,
     marginLeft: 4,
+  },
+  commentButton: {
+    padding: 4,
+    marginLeft: 8,
   },
   shareIcon: {
     padding: 4,

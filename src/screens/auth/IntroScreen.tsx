@@ -34,7 +34,7 @@ const IntroScreen = ({ navigation, route }: any) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.logo}>HERE</Text>
+        <Text style={styles.logo}>Circlo</Text>
         <View style={styles.line} />
         <Text style={styles.tagline}>Private Social for Real Circles</Text>
       </View>
@@ -44,7 +44,7 @@ const IntroScreen = ({ navigation, route }: any) => {
         { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
       ]}>
         <View style={styles.textBlock}>
-          <Text style={styles.headline}>HERE is your{"\n"}private space.</Text>
+          <Text style={styles.headline}>Circlo is your{"\n"}private space.</Text>
           <Text style={styles.subtext}>
             No feeds. No algorithms.{"\n"}Just 5–10 people who matter.
           </Text>

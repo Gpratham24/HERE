@@ -65,8 +65,8 @@ export const RootNavigator = () => {
         {!user || profileError ? (
           // 1. Not Logged In or Error Fetching Profile -> Auth Stack (Login)
           <Stack.Screen name="Auth" component={AuthNavigator} />
-        ) : !userData ? (
-          // 2. Logged In but No Profile (Onboarding needed)
+        ) : !userData || !userData.onboarding_done ? (
+          // 2. Logged In but No Profile or Onboarding Not Done
           <Stack.Screen
             name="Onboarding"
             component={AuthNavigator}

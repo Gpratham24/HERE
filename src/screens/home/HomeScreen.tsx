@@ -3,16 +3,18 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   RefreshControl,
   TouchableOpacity,
   StatusBar,
+  ActivityIndicator,
+  Image,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Shadows, Sizes } from '../../theme/Theme';
 import { useCircleStore, UserStatus } from '../../store/circleStore';
 import { useAuth } from '../../context/AuthContext';
-import { PresenceCard } from '../../components/PresenceCard';
 import { PostCard } from '../../components/PostCard';
 import { wsService } from '../../services/websocket';
 import { PlusCircle, Sparkles } from 'lucide-react-native';
@@ -22,6 +24,7 @@ import { CircleSelectorModal } from '../../components/CircleSelectorModal';
 import CreatePostSheet from '../../components/CreatePostSheet';
 import CreateCircleSheet from '../../components/CreateCircleSheet';
 import { StreakCelebrationModal } from '../../components/StreakCelebrationModal';
+import { PresenceItem } from '../../components/PresenceItem';
 
 export const HomeScreen: React.FC<any> = ({ navigation, route }) => {
   const { userData } = useAuth();
@@ -37,10 +40,13 @@ export const HomeScreen: React.FC<any> = ({ navigation, route }) => {
     allCircles,
     isLoading,
     fetchHomeData,
+    fetchCirclePosts,
     fetchAllCircles,
     switchCircle,
     setPresence,
     reactToPost,
+    hasPromptedPresence,
+    setHasPromptedPresence,
   } = useCircleStore();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -60,10 +66,10 @@ export const HomeScreen: React.FC<any> = ({ navigation, route }) => {
   }, [route?.params?.openPostSheet, navigation]);
 
   const init = useCallback(async () => {
-    if (sessionInitialized) return;
-    await Promise.all([fetchHomeData(), fetchAllCircles()]);
+    if (sessionInitialized || isLoading) return;
+    await fetchHomeData();
     setSessionInitialized(true);
-  }, [fetchHomeData, fetchAllCircles, sessionInitialized]);
+  }, [fetchHomeData, sessionInitialized, isLoading]);
 
   useEffect(() => {
     init();
@@ -79,10 +85,11 @@ export const HomeScreen: React.FC<any> = ({ navigation, route }) => {
   }, [hasCircle, sessionInitialized]);
 
   useEffect(() => {
-    if (!isLoading && hasCircle && myPresence === 'free' && sessionInitialized) {
+    if (!isLoading && hasCircle && myPresence === 'free' && sessionInitialized && !hasPromptedPresence) {
       setShowStatusSelector(true);
+      setHasPromptedPresence(true);
     }
-  }, [isLoading, hasCircle, myPresence, sessionInitialized]);
+  }, [isLoading, hasCircle, myPresence, sessionInitialized, hasPromptedPresence, setHasPromptedPresence]);
 
   useEffect(() => {
     if (stats.streak > 0 && 
@@ -113,16 +120,79 @@ export const HomeScreen: React.FC<any> = ({ navigation, route }) => {
     await switchCircle(id);
   };
 
+  const getStatusColor = (status: string) => {
+    switch(status) {
+      case 'studying': return '#4F46E5';
+      case 'gym': return '#F59E0B';
+      case 'coding': return '#06B6D4';
+      case 'free': return '#10B981';
+      case 'resting': return '#8B5CF6';
+      case 'focus': return '#EF4444';
+      default: return '#94A3B8';
+    }
+  };
+
+  const renderPresenceHeader = () => (
+    <>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Currently Circlo</Text>
+        <TouchableOpacity onPress={handleUpdateStatus}>
+          <Text style={styles.seeAll}>Update Status</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false} 
+        contentContainerStyle={styles.presenceScroll}
+      >
+        {members
+          .filter(m => !m.username.toLowerCase().includes('official'))
+          .map((member) => (
+            <PresenceItem 
+              key={member.id} 
+              member={member} 
+              onPress={(name) => console.log('Pressed member:', name)}
+              getStatusColor={getStatusColor}
+            />
+          ))}
+      </ScrollView>
+
+      <View style={styles.feedHeader}>
+        <Text style={styles.feedTitle}>Circle Moments</Text>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Camera')}
+          style={styles.postButton}
+        >
+          <PlusCircle size={20} color={Colors.white} />
+          <Text style={styles.postButtonText}>New Moment</Text>
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+
+  const renderEmptyFeed = () => (
+    <View style={styles.emptyFeed}>
+      <Text style={styles.emptyFeedText}>No moments shared today yet.</Text>
+      <Text style={styles.emptyFeedSubtext}>Be the first to share what you're up to!</Text>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="white" />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
 
-      {!hasCircle && !isLoading ? (
+      {isLoading && !sessionInitialized ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading your world...</Text>
+        </View>
+      ) : !hasCircle ? (
         <View style={styles.emptyContainer}>
           <Sparkles size={80} color="#E0E7FF" style={{ marginBottom: 20 }} />
           <Text style={styles.emptyTitle}>No Circle Found</Text>
           <Text style={styles.emptySubtitle}>
-            You need to join or develop a circle space to start using HERE.
+            You need to join or develop a circle space to start using Circlo.
           </Text>
           <TouchableOpacity
             style={styles.createButton}
@@ -140,7 +210,22 @@ export const HomeScreen: React.FC<any> = ({ navigation, route }) => {
             onNotificationPress={() => {}}
           />
 
-          <ScrollView
+          <FlatList
+            data={posts}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => {
+              const author = members.find(m => m.id === item.user_id);
+              return (
+                <PostCard
+                  post={item}
+                  authorName={author?.username || 'Circle Member'}
+                  authorAvatar={author?.avatar_url}
+                  onReact={reactToPost}
+                />
+              );
+            }}
+            ListHeaderComponent={renderPresenceHeader}
+            ListEmptyComponent={renderEmptyFeed}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
@@ -150,51 +235,11 @@ export const HomeScreen: React.FC<any> = ({ navigation, route }) => {
               />
             }
             contentContainerStyle={styles.scrollContent}
-          >
-            <PresenceCard
-              members={members.filter(
-                m => !m.username.toLowerCase().includes('official'),
-              )}
-              onUpdateStatus={handleUpdateStatus}
-              onPressMember={m => console.log('Pressed member:', m.username)}
-            />
-
-            <View style={styles.feedHeader}>
-              <Text style={styles.feedTitle}>Circle Moments</Text>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('Camera')}
-                style={styles.postButton}
-              >
-                <PlusCircle size={20} color={Colors.white} />
-                <Text style={styles.postButtonText}>New Moment</Text>
-              </TouchableOpacity>
-            </View>
-
-            {posts.length === 0 ? (
-              <View style={styles.emptyFeed}>
-                <Text style={styles.emptyFeedText}>
-                  No moments shared today yet.
-                </Text>
-                <Text style={styles.emptyFeedSubtext}>
-                  Be the first to share what you're up to!
-                </Text>
-              </View>
-            ) : (
-              posts.map((post: any) => {
-                const author = members.find(m => m.id === post.user_id);
-                return (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    authorName={author?.username || 'Circle Member'}
-                    authorAvatar={author?.avatar_url}
-                    onReact={reactToPost}
-                  />
-                );
-              })
-            )}
-            <View style={{ height: 100 }} />
-          </ScrollView>
+            initialNumToRender={5}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={false} // Adjust based on memory vs crash
+          />
         </>
       )}
 
@@ -225,7 +270,11 @@ export const HomeScreen: React.FC<any> = ({ navigation, route }) => {
         circles={allCircles}
         defaultCircleId={circle?.id}
         onPosted={async () => {
-          await fetchHomeData();
+          if (circle?.id) {
+            await fetchCirclePosts(circle.id);
+          } else {
+            await fetchHomeData();
+          }
         }}
       />
 
@@ -250,11 +299,37 @@ export const HomeScreen: React.FC<any> = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: Colors.softBg,
   },
   scrollContent: {
     paddingVertical: 8,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    paddingHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 16,
+  },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: Colors.text, letterSpacing: -0.5 },
+  seeAll: { fontSize: 13, fontWeight: '700', color: Colors.primary },
+  presenceScroll: { paddingLeft: 20, paddingRight: 10 },
+  presenceItem: { alignItems: 'center', marginRight: 20, width: 64 },
+  avatarWrapper: { position: 'relative', marginBottom: 8 },
+  presenceAvatar: { width: 60, height: 60, borderRadius: 22, backgroundColor: Colors.border },
+  statusDot: { 
+    position: 'absolute', 
+    bottom: -2, 
+    right: -2, 
+    width: 16, 
+    height: 16, 
+    borderRadius: 8, 
+    borderWidth: 3, 
+    borderColor: Colors.white 
+  },
+  presenceName: { fontSize: 13, fontWeight: '800', color: Colors.text, marginBottom: 2 },
+  presenceStatus: { fontSize: 11, fontWeight: '600', color: Colors.textTertiary, textTransform: 'capitalize' },
   feedHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -329,5 +404,17 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     fontSize: 13,
     marginTop: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontWeight: '600',
   },
 });

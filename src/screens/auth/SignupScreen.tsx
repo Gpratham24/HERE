@@ -121,7 +121,7 @@ const SignupScreen = ({ navigation }: any) => {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <Text style={styles.logo}>HERE</Text>
+            <Text style={styles.logo}>Circlo</Text>
             <View style={styles.line} />
             <Text style={styles.tagline}>Private Social for Real Circles</Text>
           </View>

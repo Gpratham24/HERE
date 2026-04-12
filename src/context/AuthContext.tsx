@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { supabase } from '../utils/supabase';
 import { Session, User, AuthChangeEvent } from '@supabase/supabase-js';
 import * as Keychain from 'react-native-keychain';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getUserProfile, setSessionToken } from '../services/api';
 
 interface AuthContextType {
@@ -15,6 +16,7 @@ interface AuthContextType {
   unlockWithBiometrics: () => Promise<boolean>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateProfile: (params: any) => Promise<void>;
   profileError: string | null;
 }
 
@@ -33,7 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoadingUserData(true);
     try {
       setProfileError(null);
-      const data = await getUserProfile();
+      const data = await getUserProfile(true); // SKIP CACHE: ensure we get fresh onboarding status
       setUserData(data);
     } catch (error: any) {
       console.warn('Profile fetch failed:', error);
@@ -58,9 +60,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
 
+        // Check biometrics setting
+        const settingsData = await AsyncStorage.getItem('settings-storage');
+        let biometricsEnabled = true;
+        if (settingsData) {
+          try {
+            const parsed = JSON.parse(settingsData);
+            if (parsed.state) {
+              biometricsEnabled = parsed.state.biometricsEnabled !== false;
+            }
+          } catch (e) {}
+        }
+
         if (currentSession) {
           setSessionToken(currentSession.access_token);
           await fetchProfile();
+          
+          // If biometrics are disabled OR we're NOT on a device that supports it, unlock
+          if (!biometricsEnabled) {
+            setBiometricUnlocked(true);
+          }
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
@@ -104,7 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const credentials = await Keychain.getGenericPassword({
         service: 'biometric_gate',
-        authenticationPrompt: { title: 'Authenticating', subtitle: 'Use biometrics to unlock HERE', description: 'FaceID or Fingerprint' },
+        authenticationPrompt: { title: 'Authenticating', subtitle: 'Use biometrics to unlock Circlo', description: 'FaceID or Fingerprint' },
       });
 
       if (credentials) {
@@ -122,6 +141,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.warn('Biometric access denied or failed', error);
       return false;
+    }
+  };
+
+  const updateProfile = async (params: any) => {
+    try {
+      const { updateUserProfile } = require('../services/api');
+      await updateUserProfile(params);
+      await fetchProfile();
+    } catch (error) {
+      console.error('Update Profile Error:', error);
+      throw error;
     }
   };
 
@@ -145,6 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unlockWithBiometrics,
       signOut,
       refreshProfile: fetchProfile,
+      updateProfile,
       profileError
     }}>
       {children}

@@ -10,7 +10,9 @@ interface CircleCardProps {
   avatarUrl?: string;
   presenceCount?: number;
   streak?: number;
+  unreadCount?: number;
   onPress: () => void;
+  onLongPress?: () => void;
 }
 
 export const CircleCard = ({ 
@@ -20,18 +22,35 @@ export const CircleCard = ({
   avatarUrl, 
   presenceCount = 0, 
   streak = 0,
-  onPress 
+  unreadCount = 0,
+  onPress,
+  onLongPress 
 }: CircleCardProps) => {
   return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={onPress}>
+    <TouchableOpacity 
+      style={styles.card} 
+      activeOpacity={0.8} 
+      onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={500}
+    >
       <View style={styles.topRow}>
-        {avatarUrl ? (
-          <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-        ) : (
-          <View style={[styles.avatar, styles.avatarPlaceholder]}>
-            <Text style={styles.placeholderText}>{name.charAt(0).toUpperCase()}</Text>
-          </View>
-        )}
+        <View style={styles.avatarWrapper}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+              <Text style={styles.placeholderText}>{name.charAt(0).toUpperCase()}</Text>
+            </View>
+          )}
+          {unreadCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </Text>
+            </View>
+          )}
+        </View>
         <View style={styles.info}>
           <Text style={styles.circleName}>{name}</Text>
           <View style={styles.statsRow}>
@@ -66,7 +85,7 @@ export const CircleCard = ({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.white,
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
@@ -81,20 +100,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  avatarWrapper: {
+    position: 'relative',
+  },
   avatar: {
     width: 58,
     height: 58,
     borderRadius: 20,
   },
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: Colors.danger,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: Colors.white,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+  },
   avatarPlaceholder: {
-    backgroundColor: '#F3F2FF',
+    backgroundColor: Colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
   placeholderText: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#6358E1',
+    color: Colors.primary,
   },
   info: {
     flex: 1,
@@ -103,7 +144,7 @@ const styles = StyleSheet.create({
   circleName: {
     fontSize: 19,
     fontWeight: '900',
-    color: '#111827',
+    color: Colors.text,
     letterSpacing: -0.4,
     marginBottom: 4,
   },
@@ -113,7 +154,7 @@ const styles = StyleSheet.create({
   },
   memberCount: {
     fontSize: 14,
-    color: '#6B7280',
+    color: Colors.textSecondary,
     fontWeight: '600',
     marginLeft: 6,
   },
@@ -157,7 +198,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: Colors.border,
     marginVertical: 16,
   },
   footer: {
@@ -166,7 +207,7 @@ const styles = StyleSheet.create({
   },
   activityText: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: Colors.textTertiary,
     marginLeft: 6,
     fontWeight: '700',
     textTransform: 'uppercase',

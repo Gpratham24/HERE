@@ -70,7 +70,7 @@ export const StreakCelebrationModal: React.FC<StreakCelebrationModalProps> = ({
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `I just hit a ${days}-day streak at "${circleName}"! 🚀 Building better habits with HERE.`,
+        message: `I just hit a ${days}-day streak at "${circleName}"! 🚀 Building better habits with Circlo.`,
       });
     } catch (error) {
       console.log('Share Error:', error);
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     color: '#701A2E',
   },
   circleHighlight: {
-    color: '#6358E1', // HERE Purple
+    color: '#6358E1', // Circlo Purple
     fontStyle: 'italic',
   },
   description: {

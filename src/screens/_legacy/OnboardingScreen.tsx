@@ -90,7 +90,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
         {/* Screen 0: Splash */}
         <View style={[styles.page, { justifyContent: 'center', alignItems: 'center', paddingTop: 0 }]}>
           <View style={{ transform: [{ translateY: -20 }], alignItems: 'center' }}>
-             <Text style={[styles.title, { fontSize: 52, fontWeight: '900', letterSpacing: -2, marginBottom: 4 }]}>HERE</Text>
+             <Text style={[styles.title, { fontSize: 52, fontWeight: '900', letterSpacing: -2, marginBottom: 4 }]}>Circlo</Text>
              <Text style={styles.subtitle}>Find your people. Share what matters.</Text>
           </View>
         </View>

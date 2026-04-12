@@ -45,7 +45,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               <ChevronLeft size={24} color={Colors.text} />
             </TouchableOpacity>
           ) : (
-            <Text style={styles.brandTitle}>HERE</Text>
+            <Text style={styles.brandTitle}>Circlo</Text>
           )}
         </View>
 
@@ -96,8 +96,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 const styles = StyleSheet.create({
   headerWrapper: {
     backgroundColor: 'white',
-    paddingTop:
-      (Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0) + 12,
+    paddingTop: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',

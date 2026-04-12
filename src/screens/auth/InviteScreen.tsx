@@ -32,13 +32,25 @@ const InviteScreen = ({ navigation, route }: any) => {
   const [copied, setCopied] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
 
-  const { refreshProfile, user: authUser } = useAuth();
+  const { refreshProfile, user: authUser, updateProfile } = useAuth();
   const fetchHomeData = useCircleStore(state => state.fetchHomeData);
 
   const user = route.params?.user || authUser;
   const circleName = route.params?.circleName || 'Your Circle';
-  const inviteCode = route.params?.inviteCode || 'HERE2024';
+  const inviteCode = route.params?.inviteCode || 'Circlo2024';
   const privacy = route.params?.privacy || 'private';
+  const reason = route.params?.reason || 'our private community';
+
+  const getReasonLabel = (id: string) => {
+    const categories: Record<string, string> = {
+      '12th-grade': '12th Grade Friends circle',
+      'hostel-college': 'Hostel / College circle',
+      'work-internship': 'Work / Internship circle',
+      'long-distance': 'Long Distance Friends circle',
+      'other': 'private circle'
+    };
+    return categories[id] || id || 'private circle';
+  };
 
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   const slideAnim = React.useRef(new Animated.Value(20)).current;
@@ -69,7 +81,8 @@ const InviteScreen = ({ navigation, route }: any) => {
   };
 
   const handleWhatsApp = async () => {
-    const message = `Join my private circle "${circleName}" on HERE. Use code: ${inviteCode}`;
+    const reasonLabel = getReasonLabel(reason);
+    const message = `Join my ${reasonLabel} "${circleName}" on Circlo! 🚀\n\nUse my invite code: ${inviteCode}`;
     const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
 
     try {
@@ -87,6 +100,8 @@ const InviteScreen = ({ navigation, route }: any) => {
   const handleFinish = async () => {
     setLoading(true);
     try {
+      // Set onboarding_done to true in backend
+      await updateProfile({ onboarding_done: true });
       // Refresh profile to trigger the UI switch (userData will become non-null)
       await refreshProfile();
       // Fetch home data for the circle
@@ -205,10 +220,19 @@ const InviteScreen = ({ navigation, route }: any) => {
 
           <TouchableOpacity style={styles.copyButton} onPress={handleCopy}>
             <View style={styles.buttonLeft}>
-              <LinkIcon size={20} color="#4F46E5" />
-              <Text style={styles.buttonTextBlue}>Copy Invite Link</Text>
+              <View style={[styles.whiteIconBox, { backgroundColor: '#F5F3FF' }]}>
+                <Plus size={20} color="#4F46E5" />
+              </View>
+              <View>
+                <Text style={styles.buttonTextBlue}>Copy Invite Code</Text>
+                <Text style={styles.codeSubtitle}>{inviteCode}</Text>
+              </View>
             </View>
-            <Copy size={18} color={copied ? '#10B981' : '#4F46E5'} />
+            {copied ? (
+              <Check size={20} color="#10B981" strokeWidth={3} />
+            ) : (
+              <Copy size={20} color="#4F46E5" />
+            )}
           </TouchableOpacity>
         </View>
 
@@ -361,13 +385,21 @@ const styles = StyleSheet.create({
   },
   copyButton: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
-    padding: 18,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    ...Shadows.soft,
+  },
+  codeSubtitle: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginTop: 2,
   },
   buttonLeft: {
     flexDirection: 'row',

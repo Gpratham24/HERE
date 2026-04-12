@@ -12,6 +12,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { Colors, Shadows, Sizes } from '../../theme/Theme';
 import { getCircleByCode, joinCircle } from '../../services/api';
@@ -55,10 +56,24 @@ const JoinCircleScreen = ({ navigation, route }: any) => {
       });
     } catch (error: any) {
       console.error('Join Circle Error:', error);
-      Alert.alert(
-        'Join Failed',
-        error.message || "We couldn't find a circle with that code.",
-      );
+      const msg = error.message || "We couldn't find a circle with that code.";
+      const isLimitError = msg.toLowerCase().includes('limit') || msg.toLowerCase().includes('full');
+
+      if (isLimitError) {
+        Alert.alert(
+          'Join Failed',
+          msg,
+          [
+            { text: 'OK', style: 'cancel' },
+            { 
+              text: 'Contact Support', 
+              onPress: () => Linking.openURL('mailto:prathamg0000@gmail.com?subject=Circle Limit Inquiry') 
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Join Failed', msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -90,7 +105,7 @@ const JoinCircleScreen = ({ navigation, route }: any) => {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <Text style={styles.logo}>HERE</Text>
+            <Text style={styles.logo}>Circlo</Text>
             <View style={styles.line} />
             <Text style={styles.tagline}>Private Social for Real Circles</Text>
           </View>

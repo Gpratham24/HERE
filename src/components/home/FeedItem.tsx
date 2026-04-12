@@ -32,7 +32,7 @@ export default function FeedItem({ post, safeAreaInsets }: FeedItemProps) {
 
       {/* Top Floating Header */}
       <View style={[styles.topHeader, { paddingTop: safeAreaInsets.top + 10 }]}>
-        <Text style={styles.appTitle}>HERE</Text>
+        <Text style={styles.appTitle}>Circlo</Text>
         <Text style={styles.tabText}>For You</Text>
       </View>
 

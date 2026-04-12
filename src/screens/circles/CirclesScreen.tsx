@@ -1,11 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   RefreshControl,
   ActivityIndicator,
   Alert,
@@ -16,7 +15,9 @@ import {
   StatusBar,
   ScrollView,
   Platform,
+  Linking,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import CircleDetailScreen from './CircleDetailScreen';
 import { useCircleStore } from '../../store/circleStore';
@@ -39,13 +40,6 @@ const { width } = Dimensions.get('window');
 
 const CirclesScreen = ({ navigation }: any) => {
   const { user } = useAuth();
-  const { circle, fetchHomeData, isLoading, stats } = useCircleStore();
-
-  const circleIds = circle ? [circle.id] : [];
-  const presenceCounts = useMultipleCirclesPresence(circleIds, user);
-
-  const circles = circle ? [circle] : [];
-
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newCircleName, setNewCircleName] = useState('');
@@ -57,15 +51,47 @@ const CirclesScreen = ({ navigation }: any) => {
   const [joining, setJoining] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'private' | 'public'>('private');
+  const [showActionOptions, setShowActionOptions] = useState(false);
   const [locationStatus, setLocationStatus] = useState<
     'idle' | 'requesting' | 'granted' | 'denied'
   >('idle');
   const [detectedCity, setDetectedCity] = useState('');
 
+  const {
+    allCircles,
+    fetchAllCircles,
+    publicCircles,
+    fetchPublicCircles,
+    circle: activeCircle,
+    fetchHomeData,
+    isLoading,
+    stats,
+    unreadCounts
+  } = useCircleStore();
+
+  const filteredCircles = useMemo(() => {
+    if (activeTab === 'private') {
+      return (allCircles || []).filter(Boolean);
+    } else {
+      return (publicCircles || []).filter(Boolean);
+    }
+  }, [allCircles, publicCircles, activeTab]);
+
+  const circleIds = useMemo(() =>
+    filteredCircles.map(c => c.id).filter(Boolean),
+    [filteredCircles]
+  );
+
+  const presenceCounts = useMultipleCirclesPresence(circleIds, user);
+
   const handleTabSwitch = (tab: 'private' | 'public') => {
     setActiveTab(tab);
-    if (tab === 'public' && locationStatus === 'idle') {
-      requestLocation();
+    if (tab === 'public') {
+      if (locationStatus === 'idle') {
+        requestLocation();
+      } else if (locationStatus === 'granted') {
+        fetchPublicCircles(detectedCity);
+      }
     }
   };
 
@@ -73,7 +99,7 @@ const CirclesScreen = ({ navigation }: any) => {
     setLocationStatus('requesting');
     Alert.alert(
       'Location Access',
-      'HERE uses your location to find public hubs orbiting near you.',
+      'Circlo uses your location to find public hubs orbiting near you.',
       [
         {
           text: 'Not now',
@@ -84,23 +110,33 @@ const CirclesScreen = ({ navigation }: any) => {
           text: 'Allow',
           onPress: () => {
             setLocationStatus('granted');
-            setDetectedCity('NOIDA');
+            const city = 'Noida'; // Simplified for now, or use real geocoding
+            setDetectedCity(city);
+            fetchPublicCircles(city);
           },
         },
       ],
     );
   };
 
+  const loadData = useCallback(async () => {
+    if (!user) return;
+    const tasks = [fetchHomeData(), fetchAllCircles()];
+    if (activeTab === 'public' && locationStatus === 'granted') {
+      tasks.push(fetchPublicCircles(detectedCity));
+    }
+    await Promise.all(tasks);
+  }, [user, fetchHomeData, fetchAllCircles, fetchPublicCircles, activeTab, locationStatus, detectedCity]);
+
   useEffect(() => {
-    if (user) fetchHomeData();
-  }, [user, fetchHomeData]);
+    loadData();
+  }, [loadData]);
 
   const onRefresh = useCallback(async () => {
-    if (!user) return;
     setRefreshing(true);
-    await fetchHomeData();
+    await loadData();
     setRefreshing(false);
-  }, [user, fetchHomeData]);
+  }, [loadData]);
 
   const handlePickImage = () => {
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, response => {
@@ -138,6 +174,8 @@ const CirclesScreen = ({ navigation }: any) => {
         name: newCircleName.trim(),
         description: newCircleDesc.trim(),
         avatar_url: imageUrl,
+        location: detectedCity || '',
+        circle_type: 'private', // Defaulting to private for manual creation
       });
 
       setShowCreate(false);
@@ -169,10 +207,50 @@ const CirclesScreen = ({ navigation }: any) => {
       setJoinCode('');
       if (user) await fetchHomeData();
     } catch (err: any) {
-      Alert.alert('Join Failed', err.message || 'Could not join circle.');
+      const msg = err.message || 'Could not join circle.';
+      const isLimitError = msg.toLowerCase().includes('limit') || msg.toLowerCase().includes('full');
+
+      if (isLimitError) {
+        Alert.alert(
+          'Join Failed',
+          msg,
+          [
+            { text: 'OK', style: 'cancel' },
+            { 
+              text: 'Contact Support', 
+              onPress: () => Linking.openURL('mailto:prathamg0000@gmail.com?subject=Circle Limit Inquiry') 
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Join Failed', msg);
+      }
     } finally {
       setJoining(false);
     }
+  };
+
+  const handleLeaveCircle = (circleId: string, circleName: string) => {
+    Alert.alert(
+      'Leave Circle',
+      `Are you sure you want to leave ${circleName}? You will need a new invite code to join again.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Leave', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.leaveCircle(circleId);
+              if (user) await fetchHomeData();
+              Alert.alert('Left Circle', `You are no longer a member of ${circleName}.`);
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Could not leave circle.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const renderHeader = () => (
@@ -196,7 +274,7 @@ const CirclesScreen = ({ navigation }: any) => {
                 activeTab === 'private' && styles.activeTabText,
               ]}
             >
-              Private
+              My Circles
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -215,15 +293,6 @@ const CirclesScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         </View>
       </View>
-
-      {activeTab === 'private' && circles.length > 0 && (
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Your People</Text>
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>{circles.length}</Text>
-          </View>
-        </View>
-      )}
 
       {activeTab === 'public' && (
         <View style={styles.sectionHeader}>
@@ -245,7 +314,7 @@ const CirclesScreen = ({ navigation }: any) => {
       </View>
 
       <View style={styles.textStack}>
-        <Text style={styles.emptyTitle}>No Circles yet</Text>
+        <Text style={styles.emptyTitle}>Join your first Circle</Text>
         <Text style={styles.emptySubtitle}>
           Start a private space for your closest relationships and shared vibes.
         </Text>
@@ -278,7 +347,7 @@ const CirclesScreen = ({ navigation }: any) => {
       <StatusBar barStyle="dark-content" />
       {activeTab === 'private' ? (
         <FlatList
-          data={circles}
+          data={filteredCircles}
           keyExtractor={item => item.id}
           ListHeaderComponent={renderHeader}
           renderItem={({ item }) => (
@@ -293,13 +362,15 @@ const CirclesScreen = ({ navigation }: any) => {
                     : 'never'
                 }
                 presenceCount={presenceCounts[item.id] || 0}
-                streak={item.id === circle?.id ? stats.streak : (item.streak || 0)}
+                streak={item.id === activeCircle?.id ? stats.streak : (item.streak || 0)}
+                unreadCount={unreadCounts[item.id] || 0}
                 onPress={() =>
                   navigation.navigate('CircleDetail', {
                     circleId: item.id,
                     circleName: item.name,
                   })
                 }
+                onLongPress={() => handleLeaveCircle(item.id, item.name)}
               />
             </View>
           )}
@@ -318,6 +389,34 @@ const CirclesScreen = ({ navigation }: any) => {
         >
           {renderHeader()}
           <View style={styles.publicGrid}>
+            {filteredCircles.length > 0 && (
+              <View style={{ width: '100%', marginBottom: 24 }}>
+                {filteredCircles.map(item => (
+                  <View key={item.id} style={{ marginBottom: 16 }}>
+                    <CircleCard
+                      name={item.name}
+                      avatarUrl={item.avatar_url}
+                      memberCount={item.member_count || 0}
+                      lastActivity={
+                        item.last_activity_at
+                          ? new Date(item.last_activity_at).toLocaleDateString()
+                          : 'never'
+                      }
+                      presenceCount={presenceCounts[item.id] || 0}
+                      streak={item.id === activeCircle?.id ? stats.streak : (item.streak || 0)}
+                      unreadCount={unreadCounts[item.id] || 0}
+                      onPress={() =>
+                        navigation.navigate('CircleDetail', {
+                          circleId: item.id,
+                          circleName: item.name,
+                        })
+                      }
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
+
             {locationStatus !== 'granted' ? (
               <View style={styles.permissionBox}>
                 <View style={styles.locationIconWrap}>
@@ -355,14 +454,71 @@ const CirclesScreen = ({ navigation }: any) => {
         </View>
       )}
 
-      {circles.length > 0 && (
+      {filteredCircles.length > 0 && (
         <TouchableOpacity
           style={styles.fab}
-          onPress={() => setShowCreate(true)}
+          onPress={() => setShowActionOptions(true)}
         >
           <Plus size={32} color="#FFFFFF" strokeWidth={3} />
         </TouchableOpacity>
       )}
+
+      {/* Quick Action Selector */}
+      <Modal
+        visible={showActionOptions}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowActionOptions(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setShowActionOptions(false)}
+        >
+          <View style={styles.actionMenu}>
+            <Text style={styles.actionTitle}>Circle Actions</Text>
+            
+            <TouchableOpacity 
+              style={styles.actionBtn} 
+              onPress={() => {
+                setShowActionOptions(false);
+                setShowCreate(true);
+              }}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: '#F3F2FF' }]}>
+                <Plus size={20} color={Colors.primary} strokeWidth={3} />
+              </View>
+              <View>
+                <Text style={styles.actionLabel}>Create a Circle</Text>
+                <Text style={styles.actionSub}>Start your own private space</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.actionBtn} 
+              onPress={() => {
+                setShowActionOptions(false);
+                setShowJoin(true);
+              }}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: '#F0F9FF' }]}>
+                <Users size={20} color="#0EA5E9" strokeWidth={2.5} />
+              </View>
+              <View>
+                <Text style={styles.actionLabel}>Join a Circle</Text>
+                <Text style={styles.actionSub}>Orbital entry with invite code</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.closeActionBtn} 
+              onPress={() => setShowActionOptions(false)}
+            >
+              <Text style={styles.closeActionText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal
         visible={showCreate}
@@ -514,7 +670,7 @@ const CirclesScreen = ({ navigation }: any) => {
                     fontSize: 20,
                   },
                 ]}
-                placeholder="HERE-CODE"
+                placeholder="Circlo-CODE"
                 placeholderTextColor="#CBD5E1"
                 value={joinCode}
                 onChangeText={setJoinCode}
@@ -576,13 +732,13 @@ const styles = StyleSheet.create({
   tabWrapper: { paddingHorizontal: 24, marginBottom: 12 },
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: Colors.border,
     borderRadius: 20,
     padding: 4,
   },
   tab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 16 },
-  activeTab: { backgroundColor: '#FFFFFF', ...Shadows.soft },
-  tabText: { fontSize: 13, fontWeight: '700', color: '#64748B' },
+  activeTab: { backgroundColor: Colors.white, ...Shadows.soft },
+  tabText: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary },
   activeTabText: { color: Colors.text },
   sectionHeader: {
     flexDirection: 'row',
@@ -593,7 +749,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: Colors.text },
   countBadge: {
-    backgroundColor: '#F3F2FF',
+    backgroundColor: Colors.primaryLight,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
@@ -619,7 +775,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#F3F2FF',
+    backgroundColor: Colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
@@ -636,7 +792,7 @@ const styles = StyleSheet.create({
   },
   emptySubtitle: {
     fontSize: 15,
-    color: '#64748B',
+    color: Colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     fontWeight: '500',
@@ -660,14 +816,14 @@ const styles = StyleSheet.create({
   },
   secondaryCta: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.white,
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: 'center',
     flex: 1,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: Colors.border,
     justifyContent: 'center',
     marginLeft: 12,
   },
@@ -685,7 +841,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: 40,
+    bottom: 110, // Sitting above the floating tab bar
     right: 24,
     width: 60,
     height: 60,
@@ -693,7 +849,67 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    ...Shadows.dark,
+    ...Shadows.premium,
+    zIndex: 999,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  actionMenu: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 32,
+    padding: 24,
+    ...Shadows.premium,
+  },
+  actionTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#94A3B8',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  actionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  actionLabel: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  actionSub: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  closeActionBtn: {
+    marginTop: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  closeActionText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#94A3B8',
   },
   loadingBox: {
     ...StyleSheet.absoluteFillObject,
@@ -717,7 +933,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#F3F2FF',
+    backgroundColor: Colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
@@ -730,7 +946,7 @@ const styles = StyleSheet.create({
   },
   permSub: {
     fontSize: 15,
-    color: '#64748B',
+    color: Colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 24,

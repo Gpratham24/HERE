@@ -55,7 +55,7 @@ export default function InterestScreen({ onComplete }: InterestScreenProps) {
       
       {/* Floating Logo above sheet */}
       <View style={styles.logoWrapper}>
-        <Text style={styles.logoMain}>HERE</Text>
+        <Text style={styles.logoMain}>Circlo</Text>
         <Text style={styles.tagline}>Find your people. Share what matters.</Text>
       </View>
 

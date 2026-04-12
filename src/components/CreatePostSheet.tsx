@@ -254,14 +254,18 @@ const CreatePostSheet: React.FC<Props> = ({
               </Text>
             </View>
 
-            {/* ── Voice Note (UI only decorative) ── */}
-            <TouchableOpacity style={styles.voiceRow} activeOpacity={0.7}>
+            {/* ── Voice Note ── */}
+            <TouchableOpacity 
+              style={styles.voiceRow} 
+              activeOpacity={0.7}
+              onPress={() => Alert.alert('Coming Soon', 'Voice notes are currently in development. Stay tuned!')}
+            >
               <View style={styles.voiceIcon}>
                 <Mic size={20} color="#fff" />
               </View>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.voiceTitle}>Record Voice Note</Text>
-                <Text style={styles.voiceHint}>
+                <Text style={styles.voiceHint} numberOfLines={1}>
                   Add a personal touch with audio
                 </Text>
               </View>

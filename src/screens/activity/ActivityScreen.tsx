@@ -11,7 +11,7 @@ import {
   StatusBar
 } from 'react-native';
 import { Colors, Shadows, Sizes } from '../../theme/Theme';
-import { Sparkles, Plus, ChevronRight, Zap, Target, Coffee, User, Activity } from 'lucide-react-native';
+import { Sparkles, Plus, ChevronRight, Zap, Target, Coffee, User, Activity, Lock } from 'lucide-react-native';
 import { CheckInModal } from '../../components/CheckInModal'; 
 
 const { width } = Dimensions.get('window');
@@ -27,6 +27,7 @@ const PRESENCE_DATA = [
 const ActivityScreen = () => {
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [hasCheckedIn, setHasCheckedIn] = useState(false);
+  const [isLocked, setIsLocked] = useState(true);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -36,7 +37,7 @@ const ActivityScreen = () => {
         <View style={styles.topHeader}>
           <View style={styles.logoRow}>
             <View style={styles.brandDot} />
-            <Text style={styles.brandText}>HERE</Text>
+            <Text style={styles.brandText}>Circlo</Text>
           </View>
           <TouchableOpacity style={styles.profileBtn}>
             <Image 
@@ -76,7 +77,7 @@ const ActivityScreen = () => {
 
         {/* 2. THE PRESENCE LAYER (Ambient Awareness) */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Currently HERE</Text>
+          <Text style={styles.sectionTitle}>Currently Circlo</Text>
           <TouchableOpacity>
              <Text style={styles.seeAll}>See All</Text>
           </TouchableOpacity>
@@ -167,6 +168,29 @@ const ActivityScreen = () => {
         </TouchableOpacity>
 
       </ScrollView>
+
+      {isLocked && (
+        <View style={styles.lockOverlay}>
+          <View style={styles.frostedGlass}>
+             <View style={styles.lockIconCircle}>
+                <Lock size={40} color={Colors.primary} strokeWidth={2.5} />
+             </View>
+             <Text style={styles.lockTitle}>Explore Locked</Text>
+             <Text style={styles.lockSub}>
+               Discover new social territories and global vibes. 
+               Unlock exploration to find your next orbit.
+             </Text>
+             <TouchableOpacity 
+               style={styles.unlockButton}
+               onPress={() => setIsLocked(false)}
+               activeOpacity={0.8}
+             >
+               <Sparkles size={20} color="#FFFFFF" strokeWidth={2.5} />
+               <Text style={styles.unlockButtonText}>Unlock Discovery</Text>
+             </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <CheckInModal 
         visible={showCheckIn} 
@@ -345,6 +369,61 @@ const styles = StyleSheet.create({
   vibeContent: { flex: 1 },
   vibeTitle: { fontSize: 17, fontWeight: '800', color: Colors.text, marginBottom: 2 },
   vibeSubText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
+
+  // Lock UI
+  lockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  frostedGlass: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  lockIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    ...Shadows.medium,
+  },
+  lockTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginBottom: 12,
+    letterSpacing: -0.5,
+  },
+  lockSub: {
+    fontSize: 16,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 24,
+    fontWeight: '500',
+    marginBottom: 32,
+  },
+  unlockButton: {
+    flexDirection: 'row',
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 18,
+    borderRadius: 20,
+    alignItems: 'center',
+    ...Shadows.medium,
+  },
+  unlockButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 16,
+    marginLeft: 10,
+  },
 });
 
 export default ActivityScreen;
