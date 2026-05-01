@@ -2,226 +2,129 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar, Text, View, Animated, StyleSheet, TouchableOpacity, ActivityIndicator, BackHandler } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, Compass, Plus, Bell, User, Search, Users } from 'lucide-react-native';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import WelcomeScreen from './src/screens/WelcomeScreen';
-import InterestScreen from './src/screens/InterestScreen';
-import CommunityScreen from './src/screens/CommunityScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
-import DiscoverScreen from './src/screens/DiscoverScreen'; // Add this
+import WelcomeScreen from './src/screens/auth/WelcomeScreen';
+import ProfileScreen from './src/screens/main/ProfileScreen';
 import { Colors } from './src/theme/Theme';
 
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
-
-const SuccessScreen = ({ onComplete }: { onComplete: () => void }) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.92)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, friction: 7, tension: 40, useNativeDriver: true })
-    ]).start(() => {
-      setTimeout(onComplete, 2200);
-    });
-  }, []);
-
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
-      <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }], alignItems: 'center' }}>
-        <Text style={{ fontSize: 34, fontWeight: '900', color: '#0F172A', letterSpacing: -1, marginBottom: 12 }}>
-          Welcome to HERE
-        </Text>
-        <Text style={{ fontSize: 15, fontStyle: 'italic', color: '#64748B', textAlign: 'center', paddingHorizontal: 36, lineHeight: 22 }}>
-          "Find your people. Share what matters."
-        </Text>
-      </Animated.View>
-    </View>
-  );
-};
-
-import CreatePostModal from './src/components/home/CreatePostModal';
-
-import NotificationScreen from './src/screens/NotificationScreen'; // Add this
 
 const currentScreenColor = (isActive: boolean) => (isActive ? Colors.primary : '#8E8E93');
 
+import CirclesScreen from './src/screens/circles/CirclesScreen';
+import ActivityScreen from './src/screens/main/ActivityScreen';
+import LiveRoomScreen from './src/screens/main/LiveRoomScreen';
+import MomentsScreen from './src/screens/moments/MomentsScreen';
+import ScrapbookScreen from './src/screens/moments/ScrapbookScreen';
+import ThreadScreen from './src/screens/circles/ThreadScreen';
+import HomeScreen from './src/screens/main/HomeScreen';
+import OnboardingFlow from './src/screens/onboarding/OnboardingFlow';
+import AppHeader from './src/components/common/AppHeader';
+
 const MainApp = () => {
-  const [currentTab, setCurrentTab] = useState<'home' | 'discover' | 'create' | 'notifications' | 'profile'>('home');
-  const [navHistory, setNavHistory] = useState<string[]>(['home']);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [hasUnread, setHasUnread] = useState(false);
+  const [currentTab, setCurrentTab] = useState<'home' | 'circles' | 'activity' | 'profile'>('home');
+  const [isInLiveRoom, setIsInLiveRoom] = useState(false);
+  const [currentThread, setCurrentThread] = useState<any>(null);
+  const [isPostOpen, setIsPostOpen] = useState(false);
   const insets = useSafeAreaInsets();
-  
-  useEffect(() => {
-    const uid = auth().currentUser?.uid;
-    if (!uid) return;
+  const { Colors } = useTheme();
 
-    const unsubscribe = firestore()
-      .collection('notifications')
-      .where('targetUid', '==', uid)
-      .where('isRead', '==', false)
-      .onSnapshot(snapshot => {
-         setHasUnread(snapshot && !snapshot.empty);
-      }, err => console.log('App Notification Error:', err));
+  if (isInLiveRoom) {
+    return <LiveRoomScreen navigation={{ goBack: () => setIsInLiveRoom(false) }} />;
+  }
 
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-     const backAction = () => {
-        if (isCreateOpen) {
-           setIsCreateOpen(false);
-           return true;
-        }
-        if (navHistory.length > 1) {
-           const newHist = [...navHistory];
-           newHist.pop(); // remove current tab
-           const prevTab = newHist[newHist.length - 1];
-           setNavHistory(newHist);
-           setCurrentTab(prevTab as any);
-           return true;
-        }
-        return false; // let app exit default
-     };
-     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-     return () => backHandler.remove();
-  }, [navHistory, isCreateOpen]);
-
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  const handleCreatePress = () => {
-    Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 1.15, duration: 100, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 1, duration: 80, useNativeDriver: true })
-    ]).start(() => {
-      setIsCreateOpen(true);
-    });
-  };
+  if (currentThread) {
+    return <ThreadScreen navigation={{ goBack: () => setCurrentThread(null) }} circle={currentThread} />;
+  }
 
   const renderTabContent = () => {
     switch (currentTab) {
       case 'home':
-        return <HomeScreen 
-          onExploreCommunities={() => { setCurrentTab('discover'); setNavHistory(p => [...p, 'discover']); }} 
-          onCreatePost={() => setIsCreateOpen(true)} 
-          onNotificationPress={() => { setCurrentTab('notifications'); setNavHistory(p => [...p, 'notifications']); }}
-          onProfilePress={() => { setCurrentTab('profile'); setNavHistory(p => [...p, 'profile']); }}
-        />;
-      case 'discover':
-        return <DiscoverScreen 
-          onNotificationPress={() => { setCurrentTab('notifications'); setNavHistory(p => [...p, 'notifications']); }}
-          onProfilePress={() => { setCurrentTab('profile'); setNavHistory(p => [...p, 'profile']); }}
-        />;
-      case 'notifications':
-        return <NotificationScreen />;
+        return <HomeScreen />;
+      case 'circles':
+        return <CirclesScreen onOpenThread={setCurrentThread} />;
+      case 'activity':
+        return <ActivityScreen />;
       case 'profile':
         return <ProfileScreen />;
       default:
-        return <HomeScreen 
-          onExploreCommunities={() => { setCurrentTab('discover'); setNavHistory(p => [...p, 'discover']); }} 
-          onCreatePost={() => setIsCreateOpen(true)} 
-          onNotificationPress={() => { setCurrentTab('notifications'); setNavHistory(p => [...p, 'notifications']); }}
-          onProfilePress={() => { setCurrentTab('profile'); setNavHistory(p => [...p, 'profile']); }}
-        />;
+        return <HomeScreen />;
     }
   };
 
-
   return (
-    <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+    <View style={{ flex: 1, backgroundColor: Colors.background }}>
+      <AppHeader />
       {renderTabContent()}
 
-      <View style={[styles.floatingNav, { bottom: insets.bottom + 12 }]}>
-        <TouchableOpacity style={styles.tabItem} onPress={() => { setCurrentTab('home'); setNavHistory(p => [...p, 'home']); }} activeOpacity={0.7}>
-          <View style={currentTab === 'home' ? { backgroundColor: 'rgba(139, 92, 246, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 } : { paddingHorizontal: 12, paddingVertical: 6 }}>
-            <Home size={22} color={currentScreenColor(currentTab === 'home')} />
-          </View>
+      <View style={[styles.floatingNav, { bottom: insets.bottom + 12, backgroundColor: 'rgba(255, 255, 255, 0.9)', borderColor: 'rgba(0,0,0,0.05)' }]}>
+        <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('home')}>
+          <Home size={22} color={currentTab === 'home' ? Colors.primary : Colors.textMuted} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabItem} onPress={() => { setCurrentTab('discover'); setNavHistory(p => [...p, 'discover']); }} activeOpacity={0.7}>
-          <View style={currentTab === 'discover' ? { backgroundColor: 'rgba(139, 92, 246, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 } : { paddingHorizontal: 12, paddingVertical: 6 }}>
-            <Search size={22} color={currentScreenColor(currentTab === 'discover')} />
-          </View>
+        <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('circles')}>
+          <Users size={22} color={currentTab === 'circles' ? Colors.primary : Colors.textMuted} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.createBtn} activeOpacity={0.85} onPress={handleCreatePress}>
-          <Animated.View style={[styles.createBtnInner, { transform: [{ scale: scaleAnim }] }]}>
-            <Plus size={24} color="#ffffff" />
-          </Animated.View>
+        <TouchableOpacity 
+          style={[styles.createBtn, { backgroundColor: Colors.primary, shadowColor: Colors.primary }]} 
+          onPress={() => setIsInLiveRoom(true)}
+        >
+          <Plus size={24} color="#ffffff" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('activity')}>
+          <Bell size={22} color={currentTab === 'activity' ? Colors.primary : Colors.textMuted} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.tabItem} onPress={() => setCurrentTab('profile')}>
+          <User size={22} color={currentTab === 'profile' ? Colors.primary : Colors.textMuted} />
         </TouchableOpacity>
       </View>
-
-      <CreatePostModal visible={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
     </View>
   );
 };
 
-import { useTheme } from './src/context/ThemeContext';
-
 const AppContent = () => {
   const { user, userData, isLoading, isLoadingUserData } = useAuth();
   const { Colors } = useTheme();
-  const [currentScreen, setCurrentScreen] = useState<'welcome' | 'interests' | 'communities' | 'success' | 'home' | 'loading'>('loading');
-  const [initialCheckDone, setInitialCheckDone] = useState(false);
+  const [currentScreen, setCurrentScreen] = useState<'welcome' | 'onboarding' | 'home' | 'loading'>('loading');
 
   useEffect(() => {
     if (!isLoading && !isLoadingUserData) {
-      if (user) {
-        if (userData?.username) {
-          if (currentScreen === 'loading') {
-            setCurrentScreen('home');
-          }
-        } else if (currentScreen === 'loading') {
-          setCurrentScreen('welcome');
+      if (user && userData?.username) {
+        if (userData.onboarding_done === false) {
+          setCurrentScreen('onboarding');
+        } else {
+          setCurrentScreen('home');
         }
       } else {
         setCurrentScreen('welcome');
       }
     }
-  }, [user, userData, isLoading, isLoadingUserData, currentScreen]);
+  }, [user, userData, isLoading, isLoadingUserData]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: (currentScreen === 'loading' || currentScreen === 'welcome') ? '#F8FAFC' : Colors.background }}>
+    <View style={{ flex: 1, backgroundColor: Colors.background }}>
       {currentScreen === 'loading' && (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
       )}
 
       {currentScreen === 'welcome' && (
-        <WelcomeScreen
-          onComplete={async (isNew) => {
-            if (isNew === true) {
-              setCurrentScreen('interests');
-            } else {
-              const uid = auth().currentUser?.uid;
-              if (uid) {
-                try {
-                  const doc = await firestore().collection('users').doc(uid).get();
-                  if (doc.exists() && doc.data()?.username) {
-                    setCurrentScreen('home');
-                  } else {
-                    // Do nothing, they will stay on Welcome Screen setup stage 2 to create username
-                  }
-                } catch (e) {
-                  console.error('Error fetching user for setup:', e);
-                }
-              }
-            }
-          }}
-        />
+        <WelcomeScreen onComplete={() => {}} />
       )}
-      {currentScreen === 'interests' && <InterestScreen onComplete={() => setCurrentScreen('communities')} />}
-      {currentScreen === 'communities' && <CommunityScreen onComplete={() => setCurrentScreen('success')} />}
-      {currentScreen === 'success' && <SuccessScreen onComplete={() => setCurrentScreen('home')} />}
+
+      {currentScreen === 'onboarding' && (
+        <OnboardingFlow onComplete={() => setCurrentScreen('home')} />
+      )}
+      
       {currentScreen === 'home' && <MainApp />}
     </View>
   );
 };
 
-import { ThemeProvider } from './src/context/ThemeContext';
 
 export default function App() {
   return (
@@ -253,7 +156,7 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     height: 64,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 32,
     flexDirection: 'row',
     alignItems: 'center',
@@ -263,7 +166,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 0, 0, 0.05)',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.05,
     shadowRadius: 16,
     elevation: 8,
   },

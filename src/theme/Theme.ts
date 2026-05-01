@@ -1,22 +1,44 @@
 export const Colors = {
-  background: '#0B0B0F', // Main Screen Dark Background
-  surface: '#FFFFFF', // Pure White Cards
-  surfaceHover: '#F5F5F7', // Off-white secondary surface
-  primary: '#8B5CF6', // Accent Purple
-  accent: '#2563eb', 
-  text: '#111111', // Card Text Primary
-  textMuted: '#6B6B6B', // Card Text Secondary
-  border: '#E5E7EB',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  gold: '#facc15',
+  background: '#F8FAFC',
+  surface: '#FFFFFF',
+  surfaceElevated: '#F1F5F9',
+  primary: '#8B5CF6',
+  accent: {
+    start: '#8B5CF6',
+    end: '#A78BFA',
+  },
+  text: {
+    primary: '#0F172A',
+    secondary: '#475569',
+    muted: '#94A3B8',
+  },
+  status: {
+    focus: '#8B5CF6',
+    free: '#10B981',
+    busy: '#EF4444',
+    out: '#F59E0B',
+  },
+  glass: 'rgba(255, 255, 255, 0.7)',
+  glassBorder: 'rgba(255, 255, 255, 0.5)',
 };
 
-export const Sizes = {
-  radiusLg: 24,
-  radiusMd: 16,
-  radiusSm: 8,
-  padding: 16,
-  gap: 12,
+export const Spacing = {
+  xs: 4,
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+};
+
+export const Radius = {
+  sm: 8,
+  md: 16,
+  lg: 24,
+  full: 9999,
+};
+
+export const Theme = {
+  colors: Colors,
+  spacing: Spacing,
+  radius: Radius,
 };

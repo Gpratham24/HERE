@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Colors, Sizes } from '../../theme/Theme';
+import { Colors, Spacing, Radius } from '../../theme/Theme';
 
 interface ProfileStatsProps {
   postsCount: number;
@@ -92,17 +92,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(26, 26, 26, 0.5)',
     paddingVertical: 14,
-    borderRadius: Sizes.radiusMd,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: 'rgba(255, 255, 255, 0.05)',
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
   },
   statItem: {
     flex: 1,
@@ -113,19 +108,19 @@ const styles = StyleSheet.create({
   divider: {
     width: 1,
     height: 24,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   statNumber: {
-    color: '#0F172A',
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '800',
   },
   statLabel: {
-    color: '#64748B',
+    color: '#8E8E93',
     fontSize: 9,
     marginTop: 4,
     textAlign: 'center',
-    letterSpacing: -0.2,
-    fontWeight: '600',
+    letterSpacing: 0.5,
+    fontWeight: '700',
   },
 });

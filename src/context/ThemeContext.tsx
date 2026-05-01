@@ -12,34 +12,39 @@ const ThemeContext = createContext<ThemeContextType>({
 });
 
 const darkColors = {
-  background: '#0a0a0c',
-  surface: '#121216',
-  surfaceHover: '#1a1a20',
-  primary: '#2563eb',
-  accent: '#a855f7',
-  text: '#ffffff',
-  textMuted: '#9ca3af',
-  border: '#27272a',
+  background: '#0D0D0D',
+  surface: '#1A1A1A',
+  surfaceElevated: '#222222',
+  primary: '#8B5CF6',
+  accent: '#A78BFA',
+  text: '#FFFFFF',
+  textSecondary: '#A0A0A0',
+  textMuted: '#666666',
+  border: 'rgba(255, 255, 255, 0.1)',
+  glass: 'rgba(255, 255, 255, 0.05)',
 };
 
 const lightColors = {
-  background: '#F4F4F5',
-  surface: '#ffffff',
-  surfaceHover: '#f4f4f5',
-  primary: '#2563eb',
-  accent: '#a855f7',
-  text: '#18181B',
-  textMuted: '#71717A',
-  border: 'rgba(0,0,0,0.05)',
+  background: '#F8FAFC',
+  surface: '#FFFFFF',
+  surfaceElevated: '#F1F5F9',
+  primary: '#8B5CF6',
+  accent: '#A78BFA',
+  text: '#0F172A',
+  textSecondary: '#475569',
+  textMuted: '#94A3B8',
+  border: '#E2E8F0',
+  glass: 'rgba(255, 255, 255, 0.8)',
 };
+
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const { userData } = useAuth();
-  const [isDark, setIsDark] = useState(userData?.theme !== 'light');
+  const [isDark, setIsDark] = useState(userData?.theme === 'dark');
 
   useEffect(() => {
     if (userData?.theme) {
-      setIsDark(userData.theme !== 'light');
+      setIsDark(userData.theme === 'dark');
     }
   }, [userData?.theme]);
 
