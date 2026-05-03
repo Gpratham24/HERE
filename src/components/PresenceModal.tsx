@@ -7,6 +7,7 @@ import {
   Modal,
   TextInput,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { X, Clock, Edit2 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
@@ -26,11 +27,12 @@ export const PresenceModal: React.FC<PresenceModalProps> = ({ visible, onClose, 
   const [note, setNote] = useState('');
 
   const statuses = [
-    { label: 'Focus', emoji: '🧠' },
-    { label: 'Free', emoji: '💬' },
-    { label: 'Busy', emoji: '🔕' },
-    { label: 'Out', emoji: '🚶' },
-    { label: 'Resting', emoji: '🌙' },
+    { label: 'Focus' },
+    { label: 'Free' },
+    { label: 'Busy' },
+    { label: 'Coding' },
+    { label: 'Resting' },
+    { label: 'Out' },
   ];
 
   const durations = ['1h', '3h', 'Until change'];
@@ -38,44 +40,69 @@ export const PresenceModal: React.FC<PresenceModalProps> = ({ visible, onClose, 
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.overlay}>
-        <GlassCard style={styles.content}>
+        <GlassCard style={[styles.content, { backgroundColor: Colors.background }]}>
           <View style={styles.header}>
-            <Text style={[styles.title, { color: Colors.text }]}>How are you showing up?</Text>
-            <TouchableOpacity onPress={onClose}>
-              <X size={24} color={Colors.textSecondary} />
+            <Text style={[styles.title, { color: Colors.text }]}>
+              How are you showing up?
+            </Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              <X size={20} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollPadding}>
             <View style={styles.statusGrid}>
               {statuses.map((status) => (
                 <TouchableOpacity
                   key={status.label}
                   style={[
                     styles.statusItem,
-                    selectedStatus === status.label && { backgroundColor: Colors.primary },
+                    { backgroundColor: Colors.surface, borderColor: 'rgba(0,0,0,0.05)' },
+                    selectedStatus === status.label && {
+                      backgroundColor: Colors.primary,
+                      borderColor: Colors.primary,
+                      shadowColor: Colors.primary,
+                      shadowOpacity: 0.3,
+                      shadowRadius: 10,
+                      elevation: 5,
+                    },
                   ]}
                   onPress={() => setSelectedStatus(status.label)}
                 >
-                  <Text style={styles.statusEmoji}>{status.emoji}</Text>
-                  <Text style={[styles.statusLabel, { color: Colors.text }]}>{status.label}</Text>
+                  <Text style={[
+                    styles.statusLabel,
+                    {
+                      color: selectedStatus === status.label ? '#FFF' : Colors.text,
+                      textAlign: 'center',
+                      width: '100%'
+                    }
+                  ]}>
+                    {status.label}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: Colors.textSecondary }]}>Duration</Text>
+              <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Duration</Text>
               <View style={styles.durationRow}>
                 {durations.map((d) => (
                   <TouchableOpacity
                     key={d}
                     style={[
                       styles.durationPill,
-                      duration === d && { borderColor: Colors.primary, backgroundColor: 'rgba(108, 92, 231, 0.1)' },
+                      { backgroundColor: Colors.surface, borderColor: 'rgba(0,0,0,0.05)' },
+                      duration === d && {
+                        borderColor: Colors.primary,
+                        backgroundColor: 'rgba(108, 92, 231, 0.05)'
+                      },
                     ]}
                     onPress={() => setDuration(d)}
                   >
-                    <Text style={[styles.durationText, { color: duration === d ? Colors.primary : Colors.textSecondary }]}>
+                    <Text style={[
+                      styles.durationText,
+                      { color: duration === d ? Colors.primary : Colors.textSecondary }
+                    ]}>
                       {d}
                     </Text>
                   </TouchableOpacity>
@@ -84,22 +111,26 @@ export const PresenceModal: React.FC<PresenceModalProps> = ({ visible, onClose, 
             </View>
 
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: Colors.textSecondary }]}>Add a note</Text>
-              <View style={[styles.inputContainer, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
+              <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Add a note</Text>
+              <View style={[
+                styles.inputContainer,
+                { backgroundColor: Colors.surface, borderColor: 'rgba(0,0,0,0.05)' }
+              ]}>
                 <Edit2 size={16} color={Colors.textMuted} style={styles.inputIcon} />
                 <TextInput
-                  style={[styles.input, { color: Colors.text }]}
+                  style={[styles.input, { color: Colors.text, fontWeight: '600' }]}
                   placeholder="coding rn..."
                   placeholderTextColor={Colors.textMuted}
                   value={note}
                   onChangeText={setNote}
+                  maxLength={50}
                 />
               </View>
             </View>
 
-            <GradientButton 
-              title="Set Presence" 
-              onPress={() => onSave({ selectedStatus, duration, note })} 
+            <GradientButton
+              title="Set Presence"
+              onPress={() => onSave({ selectedStatus, duration, note })}
               style={styles.saveBtn}
             />
           </ScrollView>
@@ -112,26 +143,42 @@ export const PresenceModal: React.FC<PresenceModalProps> = ({ visible, onClose, 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
   content: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
     paddingTop: 24,
-    paddingBottom: 40,
-    maxHeight: '80%',
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    maxHeight: '85%',
+    borderWidth: 0,
+  },
+  scrollPadding: {
+    paddingHorizontal: 4,
+    paddingBottom: 20,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 28,
     paddingHorizontal: 4,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statusGrid: {
     flexDirection: 'row',
@@ -143,28 +190,30 @@ const styles = StyleSheet.create({
     width: '48%',
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    marginBottom: 12,
+    padding: 18,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    marginBottom: 14,
   },
   statusEmoji: {
     fontSize: 20,
-    marginRight: 10,
+    marginRight: 12,
   },
   statusLabel: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 28,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '900',
     textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 12,
+    letterSpacing: 1.5,
+    marginBottom: 14,
+    paddingLeft: 4,
   },
   durationRow: {
     flexDirection: 'row',
@@ -173,31 +222,34 @@ const styles = StyleSheet.create({
   durationPill: {
     flex: 1,
     marginHorizontal: 4,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
     alignItems: 'center',
   },
   durationText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '800',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
   },
   inputIcon: {
-    marginRight: 10,
+    marginRight: 12,
   },
   input: {
     flex: 1,
-    height: 48,
+    height: 54,
     fontSize: 16,
+    letterSpacing: -0.2,
   },
   saveBtn: {
-    marginTop: 8,
+    marginTop: 10,
+    height: 56,
+    borderRadius: 18,
   },
 });

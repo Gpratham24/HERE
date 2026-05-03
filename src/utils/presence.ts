@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const WS_URL = 'ws://127.0.0.1:8080/api/v1/presence/ws';
+const BASE_WS_HOST = '127.0.0.1:8080'; // Should match API host
+const WS_URL = `ws://${BASE_WS_HOST}/api/v1/presence/ws`;
 console.log('🔌 [CIRCLO] Presence WS URL:', WS_URL);
 
 export type PresenceUpdate = {
@@ -54,6 +55,14 @@ export class PresenceService {
     return () => {
       this.listeners = this.listeners.filter(l => l !== callback);
     };
+  }
+
+  static send(type: string, payload: any) {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({ type, payload }));
+    } else {
+      console.warn('WS not connected, cannot send:', type);
+    }
   }
 
   static disconnect() {

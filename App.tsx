@@ -17,6 +17,7 @@ import LiveRoomScreen from './src/screens/main/LiveRoomScreen';
 import MomentsScreen from './src/screens/moments/MomentsScreen';
 import ScrapbookScreen from './src/screens/moments/ScrapbookScreen';
 import ThreadScreen from './src/screens/circles/ThreadScreen';
+import CircleSettingsScreen from './src/screens/circles/CircleSettingsScreen';
 import HomeScreen from './src/screens/main/HomeScreen';
 import OnboardingFlow from './src/screens/onboarding/OnboardingFlow';
 import AppHeader from './src/components/common/AppHeader';
@@ -25,6 +26,7 @@ const MainApp = () => {
   const [currentTab, setCurrentTab] = useState<'home' | 'circles' | 'activity' | 'profile'>('home');
   const [isInLiveRoom, setIsInLiveRoom] = useState(false);
   const [currentThread, setCurrentThread] = useState<any>(null);
+  const [settingsCircle, setSettingsCircle] = useState<any>(null);
   const [isPostOpen, setIsPostOpen] = useState(false);
   const insets = useSafeAreaInsets();
   const { Colors } = useTheme();
@@ -33,8 +35,18 @@ const MainApp = () => {
     return <LiveRoomScreen navigation={{ goBack: () => setIsInLiveRoom(false) }} />;
   }
 
+  if (settingsCircle) {
+    return <CircleSettingsScreen navigation={{ goBack: () => setSettingsCircle(null) }} circle={settingsCircle} />;
+  }
+
   if (currentThread) {
-    return <ThreadScreen navigation={{ goBack: () => setCurrentThread(null) }} circle={currentThread} />;
+    return (
+      <ThreadScreen 
+        navigation={{ goBack: () => setCurrentThread(null) }} 
+        circle={currentThread} 
+        onOpenSettings={() => setSettingsCircle(currentThread)}
+      />
+    );
   }
 
   const renderTabContent = () => {

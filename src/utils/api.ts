@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// const BASE_URL = 'https://backend-circlo.onrender.com/api/v1';
+//const BASE_URL = 'https://backend-circlo.onrender.com/api';
 const BASE_URL = 'http://127.0.0.1:8080/api';
 console.log('🚀 [CIRCLO] API Base URL:', BASE_URL);
 
@@ -41,7 +41,9 @@ export const api = {
         'Content-Type': 'application/json',
       },
     });
-    return response.json();
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Request failed');
+    return data;
   },
 
   async post(endpoint: string, data: any) {
@@ -54,7 +56,9 @@ export const api = {
       },
       body: JSON.stringify(data),
     });
-    return response.json();
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Request failed');
+    return result;
   },
 
   async delete(endpoint: string) {
@@ -66,19 +70,45 @@ export const api = {
         'Content-Type': 'application/json',
       },
     });
-    return response.json();
+    
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Delete failed');
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return response.json();
+    }
+    return { success: response.ok };
   },
 
-  async uploadAvatar(fileUri: string) {
+  async patch(endpoint: string, data: any) {
+    const token = await AsyncStorage.getItem('access_token');
+    const response = await fetchWithTimeout(getUrl(endpoint), {
+      method: 'PATCH',
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Update failed');
+    return result;
+  },
+
+  async uploadCircleMedia(circleId: string, fileUri: string, type: 'icon' | 'wallpaper') {
     const token = await AsyncStorage.getItem('access_token');
     const formData = new FormData();
     formData.append('file', {
       uri: fileUri,
       type: 'image/jpeg',
-      name: 'avatar.jpg',
+      name: `${type}.jpg`,
     } as any);
 
-    const response = await fetchWithTimeout(getUrl('/user/avatar/upload'), {
+    const response = await fetchWithTimeout(getUrl(`/circles/${circleId}/upload?type=${type}`), {
       method: 'POST',
       headers: {
         'Authorization': token ? `Bearer ${token}` : '',
@@ -86,6 +116,8 @@ export const api = {
       },
       body: formData,
     });
-    return response.json();
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Upload failed');
+    return data;
   },
 };

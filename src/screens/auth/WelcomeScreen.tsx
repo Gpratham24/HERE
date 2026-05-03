@@ -1,1008 +1,348 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { GoogleSignin } from "@react-native-google-signin/google-signin";import {
+import {
   View,
   Text,
   StyleSheet,
   Animated,
   TouchableOpacity,
-  TextInput,
   Dimensions,
   SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ActivityIndicator,
-  Image,
-  ScrollView,
   StatusBar,
+  Platform,
 } from 'react-native';
-import { launchImageLibrary } from 'react-native-image-picker';
-import { Check, X, Mail, Lock, Eye, EyeOff, MapPin, Headphones, Brain, Rocket, HeartPulse, Music, Compass, Sparkles } from 'lucide-react-native';
-import { api } from '../../utils/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAuth } from '../../context/AuthContext';
-import { Colors, Spacing, Radius } from '../../theme/Theme';
-import { useTheme } from '../../context/ThemeContext';
+import { OrbBackground } from '../../components/common/OrbBackground';
+
+// New Separate Screens
+import AuthScreen from './AuthScreen';
+import ChoiceScreen from '../onboarding/ChoiceScreen';
+import CreateCircleScreen from '../circles/CreateCircleScreen';
+import JoinCircleScreen from '../circles/JoinCircleScreen';
+import InviteScreen from '../circles/InviteScreen';
+import TransitionScreen from '../onboarding/TransitionScreen';
 
 const { height, width } = Dimensions.get('window');
+
+const THEME = {
+  purple: '#7F77DD',
+  text: '#1A1A1A',
+  textMuted: '#6B7280',
+  border: '#E5E7EB',
+  offWhite: '#FDFDFF',
+};
+
+type Stage = 
+  | 'splash' 
+  | 'onboarding' 
+  | 'auth' 
+  | 'choice' 
+  | 'create' 
+  | 'join' 
+  | 'invite' 
+  | 'quote_transition';
 
 interface WelcomeScreenProps {
   onComplete: (isNewUser?: boolean) => void;
 }
 
-export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
-  const { Colors } = useTheme();
-  const { login: authLogin } = useAuth();
-  const [stage, setStage] = useState<'splash' | 'form'>('splash');
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('signup');
+const LiveRoomVisual = () => {
+  const pulse1 = useRef(new Animated.Value(1)).current;
+  const pulse2 = useRef(new Animated.Value(1)).current;
 
-  // Animation Refs
-  const logoY = useRef(new Animated.Value(height / 2 - 40)).current; // Start centered
-  const contentAlpha = useRef(new Animated.Value(0)).current;
-  const skipBtnAlpha = useRef(new Animated.Value(1)).current;
-  const [onboardingPage, setOnboardingPage] = useState(0);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-
-  // Form state
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [signupStep, setSignupStep] = useState<1 | 2>(1);
-
-  const [name, setName] = useState('');
-  const [username, setUsername] = useState('');
-  const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null);
-  const [isChecking, setIsChecking] = useState(false);
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [authLoading, setAuthLoading] = useState(false);
-  const googleBtnWidth = useRef(new Animated.Value(48)).current;
-  const googleTextAlpha = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => {
-    if (typeof GoogleSignin !== 'undefined') {
-      GoogleSignin.configure({
-        webClientId: '933732005431-ihncm3bjh4d4s3bpepafumqq43pn9mv7.apps.googleusercontent.com',
-      });
-    }
-
-    const checkLoggedIn = async () => {
-      const token = await AsyncStorage.getItem('access_token');
-      if (token) {
-        onComplete(false);
-      }
+  useEffect(() => {
+    const createAnim = (val: Animated.Value, delay: number) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.parallel([
+            Animated.timing(val, { toValue: 2, duration: 2000, useNativeDriver: true }),
+            Animated.timing(val, { toValue: 1, duration: 0, useNativeDriver: true }), // Reset
+          ])
+        ])
+      );
     };
-    checkLoggedIn();
+    
+    Animated.parallel([
+      createAnim(pulse1, 0),
+      createAnim(pulse2, 1000),
+    ]).start();
   }, []);
 
-  const onGoogleButtonPress = async () => {
-    try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const response = await GoogleSignin.signIn();
-      const idToken = response.data?.idToken || response.idToken;
-      const googleCredential = auth.GoogleAuthProvider.credential(idToken);
-            await auth().signInWithCredential(googleCredential);
-      
-      const uid = auth().currentUser?.uid;
-      if (uid) {
-        const userDoc = await firestore().collection('users').doc(uid).get();
-        if (userDoc.exists() && userDoc.data()?.username) {
-           if (onComplete) onComplete(false);
-        } else {
-           setSignupStep(2);
-        }
-      }
-    } catch (error) {
-      console.error('Google Sign-In Error:', error);
-      Alert.alert('Google Auth Fail', error instanceof Error ? error.message : 'Login Cancelled');
-    }
-  };
+  return (
+    <View style={styles.ringContainer}>
+      <Animated.View style={[styles.pulseRing, { transform: [{ scale: pulse1 }], opacity: pulse1.interpolate({ inputRange: [1, 2], outputRange: [0.4, 0] }) }]} />
+      <Animated.View style={[styles.pulseRing, { transform: [{ scale: pulse2 }], opacity: pulse2.interpolate({ inputRange: [1, 2], outputRange: [0.4, 0] }) }]} />
+      <View style={styles.liveAvStack}>
+        <View style={[styles.av, { width: 52, height: 52, backgroundColor: '#EDE9FE', borderWidth: 3 }]}><Text style={styles.avText}>A</Text></View>
+        <View style={[styles.av, { width: 52, height: 52, backgroundColor: '#DCFCE7', marginLeft: -16, borderWidth: 3 }]}><Text style={styles.avText}>P</Text></View>
+      </View>
+    </View>
+  );
+};
 
-  const handlePickImage = () => {
-    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, (res) => {
-      if (res.didCancel) return;
-      if (res.errorCode) {
-        Alert.alert('Error', res.errorMessage || 'Unknown Error');
-        return;
-      }
-      if (res.assets && res.assets.length > 0) {
-        setAvatarUri(res.assets[0].uri || null);
-      }
-    });
-  };
+export default function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
+  const [stage, setStage] = useState<Stage>('splash');
+  const [obStep, setObStep] = useState(0);
+  const [circleData, setCircleData] = useState<any>(null);
+
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(15)).current;
 
   useEffect(() => {
-    // Smoother transition into the form layout loaded immediately if already viewed?
-    // Auto advance from Screen 0 (Splash) to Screen 1 after 2 seconds
-    const timer = setTimeout(() => {
-      if (stage === 'splash' && onboardingPage === 0) {
-        handleNextPage();
-      }
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [onboardingPage, stage]);
-
-  const checkUsername = (val: string) => {
-    setUsername(val);
-    const cleaned = val.trim();
-    if (!cleaned) {
-      setIsUsernameAvailable(null);
-    } else {
-      setIsUsernameAvailable(true);
-    }
-  };
-
-  useEffect(() => {
-    if (stage === 'form') {
-      const targetY = 180;
-      Animated.timing(logoY, {
-        toValue: targetY,
-        duration: 400,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [authMode, signupStep]);
+    triggerTransition();
+  }, [stage, obStep]);
 
   const triggerTransition = () => {
-    setStage('form');
-    const targetY = 180;
-    Animated.parallel([
-      Animated.timing(logoY, {
-        toValue: targetY, // Top aligned position based on cards height
-        duration: 700,
-        useNativeDriver: true,
-      }),
-      Animated.timing(contentAlpha, {
-        toValue: 1,
-        duration: 800,
-        delay: 200, // Slight delay for cleaner transition
-        useNativeDriver: true,
-      }),
-      Animated.timing(googleBtnWidth, {
-        toValue: 280,
-        duration: 600,
-        useNativeDriver: false,
-      }),
-      Animated.timing(googleTextAlpha, {
-        toValue: 1,
-        duration: 400,
-        delay: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(skipBtnAlpha, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    fadeAnim.setValue(1);
+    slideAnim.setValue(0);
   };
 
-  const handleNextPage = () => {
-    if (onboardingPage < 3) {
-      if (onboardingPage === 0) {
-        Animated.timing(logoY, {
-          toValue: 140, // Lift much higher to top center for Onboarding views space below
-          duration: 400,
-          useNativeDriver: true,
-        }).start();
-      }
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }).start(() => {
-        setOnboardingPage(prev => prev + 1);
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }).start();
-      });
-    } else {
-      triggerTransition();
+  const goTo = (newStage: Stage) => {
+    setStage(newStage);
+  };
+
+  // --- RENDERING LOGIC ---
+
+  if (stage === 'auth') {
+    return <AuthScreen onBack={() => goTo('onboarding')} onSuccess={(isNew) => isNew ? goTo('choice') : onComplete(false)} />;
+  }
+
+  if (stage === 'choice') {
+    return (
+      <ChoiceScreen 
+        onCreate={() => goTo('create')} 
+        onJoin={() => goTo('join')} 
+        onSkip={() => goTo('quote_transition')} 
+      />
+    );
+  }
+
+  if (stage === 'create') {
+    return <CreateCircleScreen onBack={() => goTo('choice')} onContinue={(data) => { setCircleData(data); goTo('invite'); }} />;
+  }
+
+  if (stage === 'join') {
+    return <JoinCircleScreen onBack={() => goTo('choice')} onJoin={() => goTo('quote_transition')} />;
+  }
+
+  if (stage === 'invite') {
+    return (
+      <InviteScreen 
+        circleName={circleData?.name} 
+        circleSize={circleData?.size} 
+        onBack={() => goTo('create')} 
+        onDone={() => goTo('quote_transition')} 
+      />
+    );
+  }
+
+  if (stage === 'quote_transition') {
+    return <TransitionScreen onEnter={() => onComplete(true)} />;
+  }
+
+  const currentOrbPreset = (): any => {
+    if (stage === 'splash') return 'splash';
+    if (stage === 'onboarding') {
+      return `ob${obStep + 1}`;
     }
-  };
-  const toggleAuthMode = () => {
-    setAuthMode(authMode === 'signup' ? 'login' : 'signup');
-    setConfirmPassword(''); // Reset confirm password
-    setIsUsernameAvailable(null); // Reset for clean toggles
-    setSignupStep(1); // Reset step index
+    return 'auth';
   };
 
-  const handleAuth = async () => {
-    if (authMode === 'signup') {
-      if (signupStep === 1) {
-        if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
-          Alert.alert('Error', 'Please fill in Email, Password, and Confirm Password.');
-          return;
-        }
-        if (password !== confirmPassword) {
-          Alert.alert('Error', 'Passwords do not match.');
-          return;
-        }
-        setSignupStep(2);
-        const handle = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
-        setUsername(handle);
-      } else {
-        if (!username.trim()) {
-          Alert.alert('Error', 'Please enter a username.');
-          return;
-        }
-        setAuthLoading(true);
-        try {
-          const res = await api.post('/auth/signup', {
-            email: email.trim(),
-            password: password.trim(),
-            username: username.trim(),
-          });
-
-          if (res.access_token) {
-            await authLogin(res.access_token, res.user);
-            
-            // Upload avatar if present
-            if (avatarUri) {
-              await api.uploadAvatar(avatarUri);
-            }
-
-            setAuthLoading(false);
-            onComplete(true);
-          } else {
-            Alert.alert('Signup Failed', res.message || 'Unknown error');
-            setAuthLoading(false);
-          }
-        } catch (error) {
-          Alert.alert('Signup Error', 'Could not connect to server');
-          setAuthLoading(false);
-        }
+  const renderOnboarding = () => {
+    const steps = [
+      {
+        title: "Not everything\nis meant for\neveryone.",
+        sub: "Some moments belong only to your people.",
+        accent: THEME.purple,
+        visual: (
+          <View style={styles.obVisualRow}>
+            <View style={[styles.av, { backgroundColor: '#EDE9FE' }]}><Text style={styles.avText}>A</Text></View>
+            <View style={[styles.av, { backgroundColor: '#DCFCE7', marginLeft: -14 }]}><Text style={styles.avText}>P</Text></View>
+            <View style={[styles.av, { backgroundColor: '#DBEAFE', marginLeft: -14 }]}><Text style={styles.avText}>J</Text></View>
+            <View style={[styles.av, { backgroundColor: '#F3F4F6', marginLeft: -14 }]}><Text style={[styles.avText, { fontSize: 12, color: '#9CA3AF' }]}>+5</Text></View>
+            <Text style={styles.obVisualTag}>your circle.{"\n"}private. yours.</Text>
+          </View>
+        )
+      },
+      {
+        title: "A private space\nfor the people\nwho matter.",
+        sub: "Not social media. No followers.\nNo algorithm. Just your circle of 5–10.",
+        accent: '#1D9E75',
+        visual: (
+          <View>
+            <View style={styles.miniCard}><View style={[styles.miniDot, { backgroundColor: '#EF4444' }]} /><View><Text style={styles.miniLabel}>No followers</Text><Text style={styles.miniSub}>invitation only · max 10</Text></View></View>
+            <View style={styles.miniCard}><View style={[styles.miniDot, { backgroundColor: '#EF4444' }]} /><View><Text style={styles.miniLabel}>No algorithm</Text><Text style={styles.miniSub}>you choose the vibe</Text></View></View>
+            <View style={styles.miniCard}><View style={[styles.miniDot, { backgroundColor: '#1D9E75' }]} /><View><Text style={styles.miniLabel}>Just your circle</Text><Text style={styles.miniSub}>real connection. no noise.</Text></View></View>
+          </View>
+        )
+      },
+      {
+        title: "See who's around.\nThen everything\nfollows.",
+        sub: "Chat, share moments, jump into a live room — all with people already in your circle.",
+        accent: '#D4537E',
+        visual: (
+          <View>
+            <View style={styles.pRow}><View style={styles.pLeft}><View style={[styles.av, { width: 34, height: 34, backgroundColor: '#EDE9FE' }]}><Text style={[styles.avText, { fontSize: 13 }]}>A</Text></View><View><Text style={styles.pName}>Alex</Text><Text style={styles.pNote}>Free to chat</Text></View></View><View style={[styles.pBadge, { backgroundColor: '#DCFCE7' }]}><Text style={[styles.pBadgeText, { color: '#059669' }]}>Free</Text></View></View>
+            <View style={styles.pRow}><View style={styles.pLeft}><View style={[styles.av, { width: 34, height: 34, backgroundColor: '#DCFCE7' }]}><Text style={[styles.avText, { fontSize: 13 }]}>P</Text></View><View><Text style={styles.pName}>Priya</Text><Text style={styles.pNote}>Deep work</Text></View></View><View style={[styles.pBadge, { backgroundColor: '#FEF3C7' }]}><Text style={[styles.pBadgeText, { color: '#D97706' }]}>Focus</Text></View></View>
+          </View>
+        )
+      },
+      {
+        title: "Sometimes your\ncircle is already\nhere.",
+        sub: "When 2+ people are active, a Live Room opens automatically.",
+        accent: '#3B82F6',
+        visual: (
+          <View style={{ alignItems: 'center' }}>
+            <LiveRoomVisual />
+            <View style={styles.liveBadge}><View style={styles.liveDot} /><Text style={styles.liveBadgeText}>Live now · 2 people</Text></View>
+          </View>
+        )
       }
-    } else {
-      if (!email.trim() || !password.trim()) {
-        Alert.alert('Error', 'Please enter your email and password.');
-        return;
-      }
-      setAuthLoading(true);
-      try {
-        const res = await api.post('/auth/login', {
-          email: email.trim(),
-          password: password.trim(),
-        });
+    ];
 
-        if (res.access_token) {
-          await authLogin(res.access_token, res.user);
-          setAuthLoading(false);
-          onComplete(false);
-        } else {
-          Alert.alert('Login Failed', res.message || 'Invalid credentials');
-          setAuthLoading(false);
-        }
-      } catch (error) {
-        Alert.alert('Login Error', 'Could not connect to server');
-        setAuthLoading(false);
-      }
-    }
+    const current = steps[obStep];
+
+    return (
+      <View style={styles.container}>
+        <OrbBackground preset={currentOrbPreset()} />
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.header}>
+            <Text style={styles.logoSmall}>CIRCLO</Text>
+          </View>
+          <Animated.View style={[styles.main, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <View style={[styles.accent, { backgroundColor: current.accent }]} />
+            <Text style={styles.title}>{current.title}</Text>
+            <View style={styles.divider} />
+            <Text style={styles.sub}>{current.sub}</Text>
+            <View style={styles.visual}>{current.visual}</View>
+          </Animated.View>
+          
+          <View style={styles.foot}>
+            <TouchableOpacity 
+              onPress={() => obStep > 0 ? setObStep(obStep - 1) : goTo('splash')} 
+              style={styles.footBtn}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+            >
+              <Text style={styles.footBtnText}>Back</Text>
+            </TouchableOpacity>
+            <View style={styles.dotRow}>
+              {[0, 1, 2, 3].map(i => (
+                <View key={i} style={[styles.dot, i === obStep && { width: 22, backgroundColor: THEME.purple }, i !== obStep && { backgroundColor: THEME.border }]} />
+              ))}
+            </View>
+            <TouchableOpacity 
+              onPress={() => {
+                if (obStep < 3) setObStep(obStep + 1);
+                else goTo('auth');
+              }} 
+              activeOpacity={0.7}
+              style={obStep === 3 ? styles.getStartedBtn : styles.footBtn}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+            >
+              <Text style={[styles.footBtnText, obStep === 3 ? { color: THEME.purple, fontWeight: '800' } : { color: THEME.purple }]}>
+                {obStep === 3 ? 'Get started →' : 'Next'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
   };
+
+  const renderSplash = () => (
+    <TouchableOpacity activeOpacity={1} style={styles.container} onPress={() => goTo('onboarding')}>
+      <OrbBackground preset="splash" />
+      <View style={styles.center}>
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], alignItems: 'center' }}>
+          <Text style={styles.quoteText}>Some moments{"\n"}are meant only{"\n"}for your people.</Text>
+          <View style={styles.splashDivider} />
+          <Text style={styles.splashLogo}>CIRCLO</Text>
+        </Animated.View>
+      </View>
+      <View style={styles.bottomHint}>
+        <View style={styles.hintBar} />
+        <Text style={styles.hintText}>tap to begin</Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
-        {/* Animated Logo Section */}
-        <Animated.View
-          style={[
-            styles.logoWrapper,
-            { transform: [{ translateY: logoY }] },
-          ]}
-        >
-          <Text style={styles.logoMain}>Circlo</Text>
-          <Animated.View style={{ opacity: fadeAnim, alignItems: 'center', paddingHorizontal: 32, marginTop: 24, width: '100%' }}>
-            {stage === 'form' ? null : (
-              onboardingPage === 0 ? (
-                <Animated.Text style={styles.tagline}>
-                  Find your people. Share what matters.
-                </Animated.Text>
-              ) : onboardingPage === 1 ? (
-                <View style={{ alignItems: 'center', width: '100%' }}>
-                  <Text style={styles.pageTitle}>“Find your people.”</Text>
-                  <Text style={styles.pageSubtitle}>Real communities. No noise.</Text>
-                  
-                  <View style={[styles.visualContainer, { height: height * 0.28, width: '120%' }]}>
-                    <View style={[styles.bubble, { top: 20, left: 30, backgroundColor: '#EDE9FE', borderColor: '#DDD6FE' }]}>
-                      <Brain size={16} color="#8B5CF6" />
-                      <Text style={styles.bubbleText}>AI</Text>
-                    </View>
-
-                    <View style={[styles.bubble, { top: 35, right: 30, backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}>
-                      <Rocket size={16} color="#EF4444" />
-                      <Text style={[styles.bubbleText, { color: '#B91C1C' }]}>Startups</Text>
-                    </View>
-
-                    <View style={[styles.bubble, { bottom: 30, left: 40, backgroundColor: '#DCFCE7', borderColor: '#BBF7D0' }]}>
-                      <HeartPulse size={16} color="#10B981" />
-                      <Text style={[styles.bubbleText, { color: '#047857' }]}>Health</Text>
-                    </View>
-
-                    <View style={[styles.bubble, { bottom: 45, right: 50, backgroundColor: '#DBEAFE', borderColor: '#BFDBFE' }]}>
-                      <Music size={16} color="#3B82F6" />
-                      <Text style={[styles.bubbleText, { color: '#1D4ED8' }]}>Music</Text>
-                    </View>
-                    
-                    <View style={styles.centerNode}>
-                      <Sparkles size={18} color="#8B5CF6" />
-                    </View>
-                  </View>
-                </View>
-              ) : onboardingPage === 2 ? (
-                <View style={{ alignItems: 'center', width: '100%' }}>
-                  <Text style={styles.pageTitle}>Join communities that matter</Text>
-                  <Text style={styles.pageSubtitle}>Connect through interests, not followers</Text>
-                  
-                  <View style={[styles.visualContainer, { height: height * 0.28, width: width, justifyContent: 'center' }]}>
-                    <View style={styles.cardStack}>
-                      <View style={[styles.card, { transform: [{ rotate: '-2deg' }], marginBottom: -15, opacity: 0.8 }]}>
-                        <View style={styles.cardHeader}>
-                          <Text style={styles.cardTitle}>🚀 Startup & Tech</Text>
-                          <Check size={14} color="#10B981" />
-                        </View>
-                        <Text style={styles.cardSub}>9.4k members active</Text>
-                      </View>
-
-                      <View style={[styles.card, { transform: [{ rotate: '1deg' }], marginBottom: -15, zIndex: 2, borderWidth: 1.5, borderColor: '#8B5CF6' }]}>
-                        <View style={styles.cardHeader}>
-                          <Text style={[styles.cardTitle, { color: '#8B5CF6' }]}>🤖 AI & Innovation</Text>
-                          <Check size={14} color="#10B981" />
-                        </View>
-                        <Text style={styles.cardSub}>14.2k members active</Text>
-                      </View>
-
-                      <View style={[styles.card, { transform: [{ rotate: '-1deg' }], opacity: 0.9 }]}>
-                        <View style={styles.cardHeader}>
-                          <Text style={styles.cardTitle}>🏥 Health & Wellness</Text>
-                          <Check size={14} color="#10B981" />
-                        </View>
-                        <Text style={styles.cardSub}>7.8k members active</Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              ) : (
-                <View style={{ alignItems: 'center', width: '100%' }}>
-                  <Text style={styles.pageTitle}>No algorithm. Just relevance.</Text>
-                  <Text style={styles.pageSubtitle}>See what matters, not what trends</Text>
-                  
-                  <View style={[styles.visualContainer, { height: height * 0.28, width: width, justifyContent: 'center' }]}>
-                    <View style={styles.feedMock}>
-                      <View style={styles.relevanceTag}>
-                        <Sparkles size={10} color="#8B5CF6" />
-                        <Text style={styles.relevanceText}>Because you follow AI</Text>
-                      </View>
-                      <View style={styles.postHeader}>
-                        <View style={styles.avatarMock} />
-                        <View>
-                          <Text style={styles.postUser}>Dr. Alex Carter</Text>
-                          <Text style={styles.postCommunity}>From AI & Innovation</Text>
-                        </View>
-                      </View>
-                      <Text style={{ fontSize: 12, color: '#334155', lineHeight: 16, marginBottom: 8, textAlign: 'left', width: '100%' }}>
-                        Just published a breakthrough in neural networks. Revisit standard models to see speeds.
-                      </Text>
-                      <View style={styles.postImageMock} />
-                    </View>
-                  </View>
-                </View>
-              )
-            )}
-          </Animated.View>
-        </Animated.View>
-
-        {/* Lower Content containing taglines and login/signup forms */}
-        <Animated.View style={[styles.contentWrapper, { opacity: contentAlpha }]}>
-          <ScrollView
-            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
-            bounces={false}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* White Sheet Bottom Card */}
-            <View style={styles.sheetCard}>
-              <Text style={styles.formHeader}>
-                {authMode === 'signup'
-                  ? (signupStep === 1 ? 'Welcome' : 'Set your Profile')
-                  : 'Welcome back'}
-              </Text>
-
-              <Text style={styles.formSubtitle}>
-                {authMode === 'signup'
-                  ? 'Sign up to get started.'
-                  : "Let's pick up where the spark left off."}
-              </Text>
-
-              {/* Profile Setup Step 2 inside Signup */}
-              {authMode === 'signup' && signupStep === 2 && (
-                <>
-                  <View style={{ alignItems: 'center', marginBottom: 22 }}>
-                    <TouchableOpacity style={styles.avatarPlaceholder} activeOpacity={0.8} onPress={handlePickImage}>
-                      {avatarUri ? (
-                        <Image source={{ uri: avatarUri as string }} style={{ width: 80, height: 80, borderRadius: 40 }} />
-                      ) : (
-                        <Text style={{ fontSize: 32, color: '#64748B' }}>👤</Text>
-                      )}
-                      <View style={styles.avatarPlusBadge}>
-                        <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: 'bold' }}>+</Text>
-                      </View>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.inputWrapper}>
-                    <TextInput
-                      style={styles.inputField}
-                      placeholder="Username"
-                      placeholderTextColor="#94A3B8"
-                      autoCapitalize="none"
-                      value={username}
-                      onChangeText={checkUsername}
-                    />
-                  </View>
-                </>
-              )}
-
-              {/* Step 1 Forms for Log-In or Setup */}
-              {(authMode === 'login' || (authMode === 'signup' && signupStep === 1)) && (
-                <>
-                  <View style={styles.inputWrapper}>
-                    <Mail size={18} color="#94A3B8" style={{ marginRight: 12 }} />
-                    <TextInput
-                      style={styles.inputField}
-                      placeholder="Email address"
-                      placeholderTextColor="#94A3B8"
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      value={email}
-                      onChangeText={setEmail}
-                    />
-                  </View>
-
-                  <View style={styles.inputWrapper}>
-                    <Lock size={18} color="#94A3B8" style={{ marginRight: 12 }} />
-                    <TextInput
-                      style={styles.inputField}
-                      placeholder="Password"
-                      placeholderTextColor="#94A3B8"
-                      secureTextEntry={!showPassword}
-                      value={password}
-                      onChangeText={setPassword}
-                    />
-                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                      {showPassword ? (
-                        <Eye size={18} color="#94A3B8" />
-                      ) : (
-                        <EyeOff size={18} color="#94A3B8" />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-
-                  {authMode === 'signup' && (
-                    <View style={[styles.inputWrapper, {
-                      borderColor: confirmPassword ? (password === confirmPassword ? '#10B981' : '#EF4444') : '#E2E8F0'
-                    }]}>
-                      <Lock size={18} color="#94A3B8" style={{ marginRight: 12 }} />
-                      <TextInput
-                        style={styles.inputField}
-                        placeholder="Confirm Password"
-                        placeholderTextColor="#94A3B8"
-                        secureTextEntry={!showPassword}
-                        value={confirmPassword}
-                        onChangeText={setConfirmPassword}
-                      />
-                      {confirmPassword.length > 0 && (
-                        password === confirmPassword ? (
-                          <Check size={18} color="#10B981" />
-                        ) : (
-                          <X size={18} color="#EF4444" />
-                        )
-                      )}
-                    </View>
-                  )}
-
-                  {authMode === 'login' && (
-                    <TouchableOpacity style={{ alignSelf: 'flex-end', marginBottom: 20 }}>
-                      <Text style={{ color: '#1E293B', fontSize: 13, fontWeight: '500' }}>Forgot password?</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
-              )}
-
-              <TouchableOpacity
-                style={styles.primaryBtn}
-                onPress={handleAuth}
-                activeOpacity={0.8}
-                disabled={authLoading}
-              >
-                 {authLoading ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                 ) : (
-                    <Text style={styles.btnText}>
-                      {authMode === 'signup'
-                        ? (signupStep === 1 ? 'Sign Up' : 'Next')
-                        : 'Login'}
-                    </Text>
-                 )}
-              </TouchableOpacity>
-
-              {!(authMode === 'signup' && signupStep === 2) && (
-                <>
-                  {/* Or Sign In With Divider */}
-                  <View style={styles.dividerRow}>
-                    <View style={styles.dividerLine} />
-                    <Text style={styles.dividerText}>Or Sign In With</Text>
-                    <View style={styles.dividerLine} />
-                  </View>
-
-                  {/* Social Icons row */}
-                  <View style={styles.socialRow}>
-                    <TouchableOpacity activeOpacity={0.8} onPress={onGoogleButtonPress}>
-                      <Animated.View style={[styles.socialBtnAnimated, { width: googleBtnWidth }]}>
-                        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#000000', position: 'absolute', left: 15 }}>G</Text>
-                        <Animated.Text style={{ opacity: googleTextAlpha, fontSize: 14, fontWeight: '600', color: '#1E293B', marginLeft: 22 }}>
-                          Continue with Google
-                        </Animated.Text>
-                      </Animated.View>
-                    </TouchableOpacity>
-                  </View>
-
-                  <TouchableOpacity
-                    style={styles.switchBtn}
-                    onPress={toggleAuthMode}
-                  >
-                    <Text style={styles.switchTextPre}>
-                      {authMode === 'signup' ? 'Already have an account? ' : "Don't have an account? "}
-                      <Text style={styles.switchTextLink}>
-                        {authMode === 'signup' ? 'Log In' : 'Sign Up'}
-                      </Text>
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-
-              {authMode === 'signup' && signupStep === 2 && (
-                <TouchableOpacity
-                  style={{ marginTop: 22, alignItems: 'center' }}
-                  onPress={async () => {
-                    await auth().signOut();
-                    setSignupStep(1);
-                  }}
-                >
-                  <Text style={{ color: '#64748B', fontSize: 13, fontWeight: '600' }}>
-                    Sign Out / Start over ➔
-                  </Text>
-                </TouchableOpacity>
-              )}
-              {/* Bottom bleed filler to cover safe area gap cutoff */}
-              <View style={{ height: 1000, backgroundColor: '#ffffff', position: 'absolute', bottom: -1000, left: 0, right: 0 }} />
-            </View>
-          </ScrollView>
-        </Animated.View>
-
-        {/* Onboarding Navigation controls visible only in splash loading */}
-        <Animated.View
-          style={[
-            styles.skipWrapper,
-            { opacity: skipBtnAlpha },
-          ]}
-          pointerEvents={stage === 'splash' ? 'auto' : 'none'}
-        >
-          {onboardingPage > 0 && onboardingPage < 3 ? (
-            <TouchableOpacity onPress={() => {
-              Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
-                setOnboardingPage(prev => prev - 1);
-                if (onboardingPage === 1) {
-                  Animated.timing(logoY, { toValue: height / 2 - 40, duration: 300, useNativeDriver: true }).start();
-                }
-                Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
-              });
-            }} activeOpacity={0.7}>
-              <Text style={styles.skipText}>Back</Text>
-            </TouchableOpacity>
-          ) : onboardingPage === 0 ? (
-            <TouchableOpacity onPress={triggerTransition} activeOpacity={0.7}>
-              <Text style={styles.skipText}>Skip ➔</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={{ width: 40 }} /> // Spacer to handle dots centered
-          )}
-          
-          <View style={[styles.dotContainer, { position: 'relative', transform: [{ translateX: 0 }] }]}>
-            {[1, 2, 3].map((i) => (
-              <View
-                key={i}
-                style={[
-                  styles.dot,
-                  onboardingPage === i ? styles.dotActive : styles.dotInactive,
-                ]}
-              />
-            ))}
-          </View>
-
-          <TouchableOpacity onPress={handleNextPage} activeOpacity={0.7}>
-            <Text style={styles.skipText}>
-              {onboardingPage < 3 ? 'Next' : 'Get Started'}
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    <View style={{ flex: 1 }}>
+      <StatusBar barStyle="dark-content" transparent backgroundColor="transparent" />
+      {stage === 'splash' ? renderSplash() : renderOnboarding()}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  logoWrapper: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  logoCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#ffffff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#0ea5e9',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(14, 165, 233, 0.15)',
-  },
-  logoInnerCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(14, 165, 233, 0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoMain: {
-    fontSize: 54,
-    fontWeight: '900',
-    color: '#0F172A',
-    letterSpacing: -2,
-    textTransform: 'uppercase',
-  },
-  tagline: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 8,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  contentWrapper: {
-    flex: 1,
-  },
-  sheetCard: {
-    backgroundColor: '#ffffff',
-    padding: 24,
-    paddingTop: 40,
-    borderTopLeftRadius: 40,
-    borderTopRightRadius: 40,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.04,
-    shadowRadius: 15,
-    elevation: 10,
-    marginTop: 180, // Allow space above for animated logo
-  },
-  formHeader: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#0F172A',
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  formSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    height: 54,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  inputField: {
-    flex: 1,
-    color: '#0F172A',
-    fontSize: 15,
-    height: '100%',
-    paddingVertical: 0,
-  },
-  avatarPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  avatarPlusBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: -2,
-    backgroundColor: '#8B5CF6',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#ffffff',
-  },
-  primaryBtn: {
-    height: 52,
-    backgroundColor: '#8B5CF6',
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  btnText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E2E8F0',
-  },
-  dividerText: {
-    paddingHorizontal: 12,
-    color: '#64748B',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  socialRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 20,
-    marginBottom: 24,
-  },
-  socialBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#ffffff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  socialBtnAnimated: {
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#ffffff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    flexDirection: 'row',
-  },
-  switchBtn: {
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  switchTextPre: {
-    color: '#64748B',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  switchTextLink: {
-    color: '#8B5CF6',
-    fontWeight: '700',
-  },
-  skipWrapper: {
-    position: 'absolute',
-    bottom: 40,
-    left: 32,
-    right: 32,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  skipText: {
-    color: '#1E293B',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  pageTitle: {
-    fontSize: 22,
+  container: { flex: 1, backgroundColor: 'transparent' },
+  safeArea: { flex: 1, paddingHorizontal: 32 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  quoteText: {
+    fontSize: 34,
     fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 6,
+    color: THEME.text,
     textAlign: 'center',
+    lineHeight: 46,
+    fontFamily: Platform.OS === 'ios' ? 'Playfair Display' : 'serif',
   },
-  pageSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-    fontWeight: '500',
+  splashDivider: { width: 32, height: 1, backgroundColor: THEME.border, marginVertical: 32 },
+  splashLogo: { fontSize: 20, fontWeight: '700', letterSpacing: 6, color: THEME.text, opacity: 0.8 },
+  bottomHint: { position: 'absolute', bottom: 60, alignSelf: 'center', alignItems: 'center' },
+  hintBar: { width: 40, height: 3, backgroundColor: THEME.border, borderRadius: 2, marginBottom: 10 },
+  hintText: { fontSize: 11, letterSpacing: 2, color: THEME.textMuted, textTransform: 'uppercase', fontWeight: '700' },
+
+  // Onboarding Info
+  header: { 
+    height: 60, 
+    justifyContent: 'center', 
+    marginTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0 
   },
-  visualContainer: {
-    marginTop: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
+  logoSmall: { 
+    fontSize: 13, 
+    fontWeight: '800', 
+    letterSpacing: 4, 
+    color: THEME.text, 
+    opacity: 0.8,
+    marginTop: 0, 
+    textTransform: 'uppercase' 
   },
-  bubble: {
-    position: 'absolute',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 24,
-    borderWidth: 1,
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-    gap: 6,
-  },
-  bubbleText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6D28D9',
-  },
-  centerNode: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#ffffff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#C084FC',
-    shadowColor: '#a855f7',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-  },
-  cardStack: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    width: '90%',
-    padding: 16,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-  },
-  cardHeader: {
-    flexDirection: 'row',
+  main: { flex: 1, justifyContent: 'center' },
+  accent: { width: 30, height: 3, borderRadius: 2, marginBottom: 20 },
+  title: { fontSize: 30, fontWeight: '700', color: THEME.text, lineHeight: 40 },
+  divider: { width: 32, height: 1, backgroundColor: THEME.border, marginVertical: 18 },
+  sub: { fontSize: 15, color: THEME.textMuted, lineHeight: 24, fontWeight: '500' },
+  visual: { marginTop: 40 },
+  obVisualRow: { flexDirection: 'row', alignItems: 'center' },
+  av: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
+  avText: { fontSize: 16, fontWeight: '700', color: THEME.text },
+  obVisualTag: { fontSize: 12, color: THEME.textMuted, marginLeft: 18, lineHeight: 18, fontWeight: '600' },
+  miniCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 18, marginBottom: 10, borderWidth: 1, borderColor: THEME.border, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 1 },
+  miniDot: { width: 8, height: 8, borderRadius: 4, marginRight: 14 },
+  miniLabel: { fontSize: 14, fontWeight: '700', color: THEME.text },
+  miniSub: { fontSize: 12, color: THEME.textMuted, marginTop: 2, fontWeight: '500' },
+  pRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFF', padding: 16, borderRadius: 18, marginBottom: 10, borderWidth: 1, borderColor: THEME.border },
+  pLeft: { flexDirection: 'row', alignItems: 'center' },
+  pName: { fontSize: 15, fontWeight: '700', color: THEME.text, marginLeft: 14 },
+  pNote: { fontSize: 12, color: THEME.textMuted, marginLeft: 14, fontWeight: '500' },
+  pBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14 },
+  pBadgeText: { fontSize: 11, fontWeight: '800' },
+  ringContainer: { width: 120, height: 120, justifyContent: 'center', alignItems: 'center' },
+  pulseRing: { position: 'absolute', width: 90, height: 90, borderRadius: 45, borderWidth: 1.5, borderColor: THEME.purple + '40' },
+  liveAvStack: { flexDirection: 'row' },
+  liveBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 24, marginTop: 20, borderWidth: 1, borderColor: '#FEE2E2' },
+  liveDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#EF4444', marginRight: 10 },
+  liveBadgeText: { fontSize: 12, fontWeight: '700', color: '#B91C1C' },
+  foot: { 
+    height: 120, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: Platform.OS === 'android' ? 12 : 0 
   },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  cardSub: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  feedMock: {
-    width: '90%',
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-  },
-  relevanceTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F3FF',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    gap: 4,
-    alignSelf: 'flex-start',
-    marginBottom: 12,
-  },
-  relevanceText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#7C3AED',
-  },
-  postHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-    gap: 8,
-  },
-  avatarMock: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#E2E8F0',
-  },
-  postUser: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#0F172A',
-  },
-  postCommunity: {
-    fontSize: 11,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  postImageMock: {
-    height: 100,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    width: '100%',
-  },
-  dotContainer: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  dotActive: {
-    backgroundColor: '#8B5CF6',
-    width: 18,
-  },
-  dotInactive: {
-    backgroundColor: '#E2E8F0',
-  },
+  footBtn: { padding: 10 },
+  footBtnText: { fontSize: 15, fontWeight: '700', color: THEME.textMuted },
+  dotRow: { flexDirection: 'row', gap: 8 },
+  dot: { width: 7, height: 7, borderRadius: 3.5 },
+  getStartedBtn: { backgroundColor: THEME.purple + '12', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 24, borderWidth: 1, borderColor: THEME.purple + '25' },
 });
